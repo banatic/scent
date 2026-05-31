@@ -1,0 +1,175 @@
+/* ============================================================================
+   scent — design tokens
+   Tokens first: every component references these, nothing hard-codes a value.
+   Two materials only:
+     - CHROME (glass): floating bars/rails/overlays. Translucent over the OS Mica.
+     - DATA (surface): trees/graphs/tables. Opaque, high-contrast, no blur.
+   Saturation lives only in DATA/category colors — chrome stays neutral.
+   ========================================================================== */
+
+:root {
+  /* ---- Type ---------------------------------------------------------------- */
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", ui-monospace, "SF Mono",
+    "Consolas", monospace;
+
+  --fs-2xs: 10px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+
+  --lh-tight: 1.25;
+  --lh-base: 1.45;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* ---- Spacing (4px base) -------------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* ---- Radius (concentric: outer = inner + padding) ------------------------ */
+  --r-1: 6px;
+  --r-2: 10px;
+  --r-3: 14px;
+  --r-4: 18px;
+  --r-pill: 999px;
+
+  /* ---- Glass material knobs ------------------------------------------------ */
+  --glass-blur: 22px;
+  --glass-saturate: 175%;
+
+  /* ---- Motion (mirrored as springs in lib/motion.ts) ----------------------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+
+  /* ---- Data / category palette (the ONLY saturated colors) ----------------- */
+  --cat-process: #6ea8fe;
+  --cat-file: #f7b955;
+  --cat-registry: #c08cf0;
+  --cat-network: #56c2a6;
+  --cat-dns: #e98aa8;
+  --cat-module: #8aa0b6;
+
+  --status-running: #34c759;
+  --status-exited: #8a9099;
+  --status-alert: #ff6b5e;
+}
+
+/* ---- Light theme (default) ------------------------------------------------- */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ink-1: #14171c; /* primary text */
+  --ink-2: #444b56; /* secondary */
+  --ink-3: #6b7280; /* muted / metadata */
+  --ink-inv: #f7f9fc; /* text on inverted (primary) controls */
+
+  /* Opaque DATA surfaces */
+  --surface-1: #ffffff;
+  --surface-2: #f4f6f9;
+  --surface-3: #eaedf2;
+  --hairline: rgba(20, 23, 28, 0.1);
+  --hairline-strong: rgba(20, 23, 28, 0.16);
+  --row-hover: rgba(20, 23, 28, 0.045);
+  --row-selected: rgba(110, 168, 254, 0.16);
+
+  /* CHROME glass */
+  --glass-fill: rgba(255, 255, 255, 0.62);
+  --glass-fill-strong: rgba(255, 255, 255, 0.78);
+  --glass-specular: rgba(255, 255, 255, 0.9); /* top-left inner highlight */
+  --glass-edge: rgba(20, 23, 28, 0.08); /* outer hairline */
+  --glass-inset: rgba(255, 255, 255, 0.55); /* bright inner stroke */
+
+  /* Inverted primary control (monochrome, not saturated) */
+  --primary-fill: #1b1f26;
+  --primary-fill-hover: #2a2f38;
+  --primary-ink: #ffffff;
+
+  --shadow-glass: 0 1px 0 0 var(--glass-specular) inset,
+    0 0 0 0.5px var(--glass-edge), 0 10px 30px -12px rgba(15, 20, 28, 0.35),
+    0 2px 8px -4px rgba(15, 20, 28, 0.22);
+  --shadow-panel: 0 0 0 0.5px var(--hairline),
+    0 18px 40px -24px rgba(15, 20, 28, 0.4);
+}
+
+/* ---- Dark theme ------------------------------------------------------------ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ink-1: #eef1f5;
+  --ink-2: #b6bdc7;
+  --ink-3: #828b97;
+  --ink-inv: #14171c;
+
+  --surface-1: #181b20;
+  --surface-2: #1f242b;
+  --surface-3: #272d35;
+  --hairline: rgba(255, 255, 255, 0.09);
+  --hairline-strong: rgba(255, 255, 255, 0.16);
+  --row-hover: rgba(255, 255, 255, 0.05);
+  --row-selected: rgba(110, 168, 254, 0.2);
+
+  --glass-fill: rgba(32, 36, 43, 0.58);
+  --glass-fill-strong: rgba(36, 41, 49, 0.8);
+  --glass-specular: rgba(255, 255, 255, 0.14);
+  --glass-edge: rgba(0, 0, 0, 0.4);
+  --glass-inset: rgba(255, 255, 255, 0.08);
+
+  --primary-fill: #eef1f5;
+  --primary-fill-hover: #ffffff;
+  --primary-ink: #14171c;
+
+  --shadow-glass: 0 1px 0 0 var(--glass-specular) inset,
+    0 0 0 0.5px var(--glass-edge), 0 14px 34px -14px rgba(0, 0, 0, 0.6),
+    0 2px 8px -4px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 0 0 0 0.5px var(--hairline),
+    0 18px 44px -26px rgba(0, 0, 0, 0.7);
+}
+
+/* Follow system theme when no explicit data-theme is set. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --ink-1: #eef1f5;
+    --ink-2: #b6bdc7;
+    --ink-3: #828b97;
+    --ink-inv: #14171c;
+
+    --surface-1: #181b20;
+    --surface-2: #1f242b;
+    --surface-3: #272d35;
+    --hairline: rgba(255, 255, 255, 0.09);
+    --hairline-strong: rgba(255, 255, 255, 0.16);
+    --row-hover: rgba(255, 255, 255, 0.05);
+    --row-selected: rgba(110, 168, 254, 0.2);
+
+    --glass-fill: rgba(32, 36, 43, 0.58);
+    --glass-fill-strong: rgba(36, 41, 49, 0.8);
+    --glass-specular: rgba(255, 255, 255, 0.14);
+    --glass-edge: rgba(0, 0, 0, 0.4);
+    --glass-inset: rgba(255, 255, 255, 0.08);
+
+    --primary-fill: #eef1f5;
+    --primary-fill-hover: #ffffff;
+    --primary-ink: #14171c;
+
+    --shadow-glass: 0 1px 0 0 var(--glass-specular) inset,
+      0 0 0 0.5px var(--glass-edge), 0 14px 34px -14px rgba(0, 0, 0, 0.6),
+      0 2px 8px -4px rgba(0, 0, 0, 0.5);
+    --shadow-panel: 0 0 0 0.5px var(--hairline),
+      0 18px 44px -26px rgba(0, 0, 0, 0.7);
+  }
+}
