@@ -35,6 +35,8 @@ features = [
     "Win32_System_Time",
     "Win32_System_ProcessStatus",
     "Win32_System_Diagnostics_ToolHelp",
+    # ReadProcessMemory, for best-effort child command-line recovery via the PEB.
+    "Win32_System_Diagnostics_Debug",
 ]
 
 [dependencies.crossbeam-channel]

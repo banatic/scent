@@ -6,6 +6,7 @@ mod ipc;
 mod launcher;
 mod modmap;
 mod model;
+mod peb;
 mod store;
 mod tracker;
 

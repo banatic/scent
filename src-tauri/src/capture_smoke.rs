@@ -378,6 +378,12 @@ fn explore_providers() {
         // process / image
         "ProcessID", "ParentProcessID", "ImageName", "ImageBase", "ImageSize",
         "ImageChecksum", "ProcessSequenceNumber", "ExitCode",
+        // process integrity / elevation (ProcessStart, id 1) — step 1 ③
+        "MandatoryLabel", "ProcessTokenIsElevated", "ProcessTokenElevationType",
+        "SessionID", "Flags", "PackageFullName",
+        // thread start (ThreadStart) — step 1 injection heuristic ②
+        "StartAddr", "StartAddress", "Win32StartAddr", "ThreadID", "TebBase",
+        "StackBase", "StackLimit", "SubProcessTag",
     ];
 
     let make_cb = |tx: crossbeam_channel::Sender<String>, seen: Arc<Mutex<HashSet<(String, u16)>>>| {
@@ -402,8 +408,9 @@ fn explore_providers() {
         }
     };
 
+    // 0x100 = READ keyword added so the Kernel-File Read event (step 1 ①) shows up.
     let file = Provider::by_guid(GUID_FILE)
-        .any(0x10 | 0x40 | 0x80 | 0x200 | 0x400 | 0x800) // filename|op_end|create|write|delete|rename
+        .any(0x10 | 0x40 | 0x80 | 0x100 | 0x200 | 0x400 | 0x800) // filename|op_end|create|read|write|delete|rename
         .add_callback(make_cb(tx.clone(), seen.clone()))
         .build();
     let registry = Provider::by_guid(GUID_REGISTRY)
@@ -415,8 +422,9 @@ fn explore_providers() {
     let dns = Provider::by_guid(GUID_DNS)
         .add_callback(make_cb(tx.clone(), seen.clone()))
         .build();
+    // 0x20 = THREAD keyword added so ThreadStart (step 1 ②) shows up.
     let process = Provider::by_guid(GUID_PROCESS)
-        .any(0x10 | 0x40) // process|image
+        .any(0x10 | 0x20 | 0x40) // process|thread|image
         .add_callback(make_cb(tx.clone(), seen.clone()))
         .build();
 
@@ -430,8 +438,9 @@ fn explore_providers() {
         .start_and_process()
         .expect("start trace (admin?)");
 
-    // Workload that exercises every category.
+    // Workload that exercises every category (incl. a file read for the READ keyword).
     let workload = "echo hi> %TEMP%\\scent_x.txt & \
+         type %TEMP%\\scent_x.txt >NUL & \
          reg add HKCU\\Software\\ScentTest /v X /t REG_SZ /d 1 /f & \
          curl -s -m 6 http://example.com -o NUL & \
          nslookup example.com & \
@@ -515,7 +524,14 @@ fn captures_cmd_subtree() {
     // 4. Drain events for a few seconds.
     let deadline = Instant::now() + Duration::from_secs(6);
     while Instant::now() < deadline {
-        while let Ok(raw) = raw_rx.try_recv() {
+        while let Ok(mut raw) = raw_rx.try_recv() {
+            // Mirror the production ingest thread: recover child command lines
+            // from the PEB before storing (the ETW callback can't).
+            if let crate::store::Captured::ProcCreate { pid, cmdline, .. } = &mut raw {
+                if cmdline.is_none() {
+                    *cmdline = crate::peb::read_command_line(*pid);
+                }
+            }
             cap.ingest(raw);
         }
         std::thread::sleep(Duration::from_millis(50));
@@ -615,7 +631,24 @@ fn captures_cmd_subtree() {
         csv.lines().count()
     );
 
+    // Step 1: child command lines are recovered from the PEB by the ingest path.
+    let child_with_cmdline = tree
+        .nodes
+        .iter()
+        .filter(|n| n.parent_node_id.is_some() && n.cmdline.is_some())
+        .count();
+    println!("child nodes with PEB-recovered cmdline: {child_with_cmdline}");
+    for n in tree.nodes.iter().filter(|n| n.parent_node_id.is_some()) {
+        if let Some(cl) = &n.cmdline {
+            println!("  {} :: {}", n.name, &cl[..cl.len().min(80)]);
+        }
+    }
+
     assert!(tree.nodes.len() >= 2, "expected root + children");
+    assert!(
+        child_with_cmdline > 0,
+        "expected ≥1 child node with a PEB-recovered command line"
+    );
     assert!(c.file > 0, "expected file events");
     assert!(c.registry > 0, "expected registry events");
     assert!(c.module > 0, "expected image-load events");

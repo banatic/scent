@@ -24,6 +24,9 @@ pub enum Captured {
         ppid: u32,
         start_key: u64,
         image: String,
+        /// Recovered from the child's PEB by the ingest thread (best-effort, heavy
+        /// — never read inside an ETW callback). `None` for instant-exit children.
+        cmdline: Option<String>,
     },
     ProcExit {
         pid: u32,
@@ -276,6 +279,7 @@ impl Capture {
                 ppid,
                 start_key,
                 image,
+                cmdline,
             } => {
                 if self.tracker.is_own(pid) {
                     return;
@@ -295,7 +299,7 @@ impl Capture {
                     start_key,
                     image: image.clone(),
                     name,
-                    cmdline: None,
+                    cmdline: cmdline.clone(),
                     status: ProcStatus::Running,
                     started_ms: ts_ms,
                     exited_ms: None,
@@ -310,7 +314,7 @@ impl Capture {
                     EventKind::ProcCreate {
                         child_pid: pid,
                         image,
-                        cmdline: None,
+                        cmdline,
                     },
                 );
                 self.tree_version += 1;

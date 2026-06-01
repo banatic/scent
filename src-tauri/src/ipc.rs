@@ -22,7 +22,10 @@ use crate::exporter;
 use crate::launcher::{self, SendHandle};
 use crate::modmap;
 use crate::model::{Category, Event};
-use crate::store::{Capture, CaptureStatus, DeepFinding, EventFilter, EventPage, ProcessTree};
+use crate::peb;
+use crate::store::{
+    Capture, Captured, CaptureStatus, DeepFinding, EventFilter, EventPage, ProcessTree,
+};
 
 /// Handles needed to tear a running capture down.
 pub struct CaptureControl {
@@ -140,11 +143,24 @@ pub fn start_capture(
         let deep_tracked = deep_tracked.clone();
         std::thread::spawn(move || {
             while let Ok(first) = raw_rx.recv() {
+                // Drain the burst, then recover child command lines from the PEB
+                // *before* taking the store lock — OpenProcess + cross-process
+                // reads must not be held under the write lock (or run in a callback).
+                let mut burst = vec![first];
+                while let Ok(next) = raw_rx.try_recv() {
+                    burst.push(next);
+                }
+                for c in burst.iter_mut() {
+                    if let Captured::ProcCreate { pid, cmdline, .. } = c {
+                        if cmdline.is_none() {
+                            *cmdline = peb::read_command_line(*pid);
+                        }
+                    }
+                }
                 let live = {
                     let mut w = capture.write();
-                    w.ingest(first);
-                    while let Ok(next) = raw_rx.try_recv() {
-                        w.ingest(next);
+                    for c in burst {
+                        w.ingest(c);
                     }
                     w.live_pids()
                 };

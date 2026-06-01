@@ -138,11 +138,14 @@ fn on_process(
             }
             let image: String = parser.try_parse("ImageName").unwrap_or_default();
             let start_key: u64 = parser.try_parse("ProcessSequenceNumber").unwrap_or(0);
+            // cmdline is recovered from the PEB by the ingest thread, never here
+            // (a cross-process read is far too heavy for an ETW callback).
             let _ = tx.send(Captured::ProcCreate {
                 pid,
                 ppid,
                 start_key,
                 image,
+                cmdline: None,
             });
         }
         2 => {
