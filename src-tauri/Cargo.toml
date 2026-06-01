@@ -20,6 +20,11 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Sigma rule engine: YAML parse + value modifiers (regex / base64).
+serde_yaml = "0.9"
+regex = "1"
+base64 = "0.22"
+
 # ETW capture
 ferrisetw = "1.2"
 

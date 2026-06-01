@@ -7,6 +7,7 @@ mod launcher;
 mod modmap;
 mod model;
 mod peb;
+mod sigma;
 mod sigma_fields;
 mod store;
 mod tracker;

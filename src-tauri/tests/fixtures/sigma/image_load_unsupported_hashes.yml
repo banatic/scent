@@ -1,0 +1,14 @@
+title: Known Malicious DLL Load By Hash
+id: a1b2c3d4-0000-0000-0000-aaaaaaaaaaaa
+status: test
+description: Uses a Hashes field scent does not capture — must be skipped at load (missing fields).
+tags:
+    - attack.defense_evasion
+logsource:
+    category: image_load
+    product: windows
+detection:
+    selection:
+        Hashes|contains: 'IMPHASH=deadbeefdeadbeefdeadbeefdeadbeef'
+    condition: selection
+level: high

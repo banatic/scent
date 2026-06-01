@@ -1,0 +1,18 @@
+title: Registry Run Key Persistence
+id: 3c89a1e8-0fba-449e-8f1b-3b3a4e1f3d2a
+status: test
+description: Detects a value written under a CurrentVersion Run/RunOnce key (autorun persistence).
+tags:
+    - attack.persistence
+    - attack.t1547.001
+logsource:
+    category: registry_set
+    product: windows
+detection:
+    selection:
+        TargetObject|contains:
+            - '\CurrentVersion\Run\'
+            - '\CurrentVersion\RunOnce\'
+            - '\CurrentVersion\RunOnceEx\'
+    condition: selection
+level: medium

@@ -62,18 +62,18 @@
 
 ---
 
-## 3단계 · Sigma 미니 평가 엔진 — 신설 `sigma.rs` (`serde_yaml`)
+## 3단계 · Sigma 미니 평가 엔진 — 신설 `sigma.rs` (`serde_yaml`) ✅
 **목표**: 큐레이션된 Sigma YAML을 컴파일 + 필드맵으로 평가. **지원 못 하면 에러 대신 스킵.**
 
-- [ ] `Cargo.toml`에 `serde_yaml` 추가.
-- [ ] **파싱**: `title,id,status,level,description`, `tags`(→ `attack.tXXXX` 추출), `logsource.category`, `detection`(임의 selection 맵 + `condition` 문자열).
-- [ ] **모디파이어**: `contains,startswith,endswith,all,re,cidr,windash,base64,base64offset`. 미지원 모디파이어 발견 → 룰 전체 `Unsupported`로 **로드시 스킵**(에러X). 기본 대소문자 무시. 리스트=OR, `|all`=AND.
-- [ ] **condition 파서**(작은 재귀하강): selection명, `and/or/not`, 괄호, `1 of selection*`, `all of them`, `all of selection*`.
-- [ ] sigma_view 제공 집합에 없는 필드를 쓰는 룰 → `MissingFields`로 스킵.
-- [ ] **API**: `CompiledRule{ id,title,level,status,tags,category,matcher }`, `load_rules(dir) -> (Vec<CompiledRule>, LoadReport{loaded,skipped_unsupported,skipped_missing_fields})`, `eval(rule, fields) -> bool`.
-- [ ] **건드리는 파일**: `sigma.rs`(신규), `Cargo.toml`, `lib.rs`, `tests/fixtures/*.yml`.
-- [ ] **검증**: SigmaHQ 실제 룰 3개(encoded powershell·Office 자식 쉘·registry_set 1개)를 `tests/fixtures`에 두고 **매칭/비매칭** 검증. `cargo test --lib`.
-- [ ] **커밋**: `feat(sigma): YAML rule compiler + condition evaluator`
+- [x] `Cargo.toml`에 `serde_yaml`/`regex`/`base64` 추가.
+- [x] **파싱**: `title,id,status,level`, `tags`(→ `attack.tXXXX` 추출), `logsource.category`, `detection`(임의 selection 맵 + `condition` 문자열). multi-doc/correlation/timeframe → Unsupported.
+- [x] **모디파이어**: `contains,startswith,endswith,all,re,cidr,windash,base64,base64offset`(+ re 플래그 i/m/s). 미지원 모디파이어 → 룰 `Unsupported` 스킵(에러X). 기본 대소문자 무시. 리스트=OR, `|all`=AND, `field: null`=부재 매칭.
+- [x] **condition 파서**(재귀하강): selection명, `and/or/not`, 괄호, `1 of`/`all of` × (`them`/`name*`/`name`). 미지의 selection 참조 → Unsupported.
+- [x] sigma_view 제공 집합에 없는 필드 사용 룰 → `MissingFields` 스킵.
+- [x] **API**: `CompiledRule{ id,title,level,status,tags,category,selections,cond }`, `load_rules(dir) -> (Vec<CompiledRule>, LoadReport{loaded,skipped_unsupported,skipped_missing_fields})`(재귀 디렉터리 워크), `CompiledRule::eval(fields) -> bool`.
+- [x] **건드리는 파일**: `sigma.rs`(신규), `Cargo.toml`, `lib.rs`, `tests/fixtures/sigma/*.yml`(4개: 3 loadable + 1 skip).
+- [x] **검증**: 인라인 룰 매칭/비매칭(encoded powershell·Office 자식 쉘·registry_set·1 of·cidr·base64/windash·미지원·필드미충족) + 픽스처 디렉터리 `load_rules` LoadReport 검증 = **9개 신규 테스트 통과**.
+- [x] **커밋**: `feat(sigma): YAML rule compiler + condition evaluator`
 
 ---
 

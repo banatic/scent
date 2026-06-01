@@ -1,0 +1,30 @@
+title: Microsoft Office Product Spawning Windows Shell
+id: 438025f9-5856-4663-83f7-52f878a44a4f
+status: stable
+description: Detects a Windows command or scripting shell spawned from a Microsoft Office product.
+tags:
+    - attack.execution
+    - attack.t1059
+    - attack.initial_access
+    - attack.t1566.001
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        ParentImage|endswith:
+            - '\WINWORD.EXE'
+            - '\EXCEL.EXE'
+            - '\POWERPNT.EXE'
+            - '\MSACCESS.EXE'
+            - '\OUTLOOK.EXE'
+        Image|endswith:
+            - '\cmd.exe'
+            - '\powershell.exe'
+            - '\pwsh.exe'
+            - '\wscript.exe'
+            - '\cscript.exe'
+    filter_optional_safe:
+        CommandLine|contains: '/safe'
+    condition: selection and not filter_optional_safe
+level: high
