@@ -135,6 +135,71 @@
 
 ---
 
+## 8단계 · UI 재설계 — 복잡도↓·필터↑ (판정-우선/Liquid Glass 유지) (`src/` + 일부 `src-tauri/`)
+**진단**: 철학(glass=chrome·data=불투명, 판정-우선, 토큰 규율)은 옳다. 문제는 적용 밀도 — **(1) 7개 평면 탭**(개념은 위계인데 평면), **(2) 상시 3겹 glass 프레임**(topbar+tabs+inspector), **(3) 데이터 풍부함을 못 따라가는 좁은 필터**(`EventFilter`= category·node단일·text·hide_noise·collapse·ts뿐 — op종류/proto/dir/port/severity/서브트리 못 거름).
+**목표**: 새 디자인 언어가 아니라 *지금 언어를 덜 쓰고, 필터를 데이터만큼 깊게*. 기존 cross-view 점프(evidence/brush)·불변식 전부 보존.
+
+### 8단계 불변식 (추가)
+- glass 규칙·토큰 규칙(`tokens.css`만) 유지. **신규 색 최소**(accent 1개 외 category/severity 팔레트 불변).
+- cross-view 동작 **회귀 금지**: evidence 점프(`App.tsx` `showEvidence`)·timeline brush(`onBrush`)·node 필터·collapse·hide_noise·export.
+- 백엔드 **캡처 파이프라인 불변**. 8.4는 **읽기 질의(`store::query`)·IPC 시그니처만** 건드린다. ETW 콜백/ingest 무변경.
+
+---
+
+#### 8.1 · IA 통합 (A) — 7탭 → 4, Evidence 세그먼트
+- `App.tsx` `Tab` = `"findings" | "evidence" | "ioc" | "verdict"`. Evidence 내부 `evidenceView: "table"|"graph"|"timeline"` 상태 신설(같은 이벤트 스트림의 3 렌즈를 세그먼트로).
+- **Deep 탭 제거**: DeepPanel을 탭에서 내림. Deep 데이터는 (a) Evidence>표에서 file-create 행 선택 시 **Inspector**에 caller stack 노출(`Inspector`는 이미 `DeepFinding` 수용), (b) "caller stack 있음" facet은 8.5. `deepMode` 토글/`getDeepFindings` 구독은 **유지**(Inspector·facet용).
+- 탭 바: `Findings(badge) · Evidence‹표│그래프│타임라인› · IOCs · Verdict`. ExportMenu 우측 유지.
+- `showEvidence`/`onBrush`는 `setTab("evidence")`+`setEvidenceView("table"/"timeline")`로 라우팅.
+- **건드리는 파일**: `App.tsx`, `components/Segmented.tsx`(신규, 토큰만), `app.css`(.tabs), DeepPanel import 정리.
+- **게이트**: `npx tsc --noEmit` · `npm run build`. 회귀: evidence/brush 점프가 Evidence 적절 서브뷰로.
+- **커밋**: `refactor(ui): 7 tabs → Findings/Evidence/IOCs/Verdict, segmented Evidence view`
+
+#### 8.2 · 맥락 Inspector (B) — 상시 300px → 슬라이드-오버
+- Inspector를 워크벤치 3번째 상시 컬럼에서 분리. 선택(node/event/deep) 있을 때만 우측 glass 슬라이드-인(`spring.panel`), 빈 상태 미렌더. close(X)/ESC 닫기.
+- `.workbench` 2컬럼(rail+center)으로, Inspector는 overlay/motion layout → 데이터 폭 환원. **상시 glass = topbar만**, inspector glass는 맥락화돼 진짜 Liquid Glass 용법.
+- **건드리는 파일**: `App.tsx`(조건부+open 상태), `components/Inspector.tsx`(close), `app.css`(.insp overlay/슬라이드), `lib/motion.ts`(필요시 slide variant).
+- **게이트**: tsc/build. 회귀: node/event/deep 선택→열림, evidence 점프 후에도 동작.
+- **커밋**: `feat(ui): contextual slide-over inspector`
+
+#### 8.3 · glass 1겹화 + 엘리베이션 통일 + TopBar 슬림 (D·E·F)
+- **D**: 탭/세그먼트 바의 자체 `backdrop-filter`+specular 제거(`app.css` `.tabs`) → `.view` 상단 통합 헤더(불투명) 또는 무블러 세그먼트. 상시 glass 1겹.
+- **E**: TopBar 4카운터 → 상태 캡슐(rec·elapsed·total), procs/live는 title/hover. "behavior analyzer" 태그 제거. 카테고리 카운트는 8.5 facet 범례로 이동.
+- **F**: 그림자 레시피 정리 — `--shadow-glass`=floating chrome 전용, 데이터 패널=`--shadow-panel` 단일. "active" 3종(row-selected/primary/chip--on) → `--accent` 1개로 수렴(토큰 신설).
+- **건드리는 파일**: `app.css`, `tokens.css`(`--accent`), `TopBar.tsx`, `components/GlassPanel.tsx`(필요시).
+- **게이트**: tsc/build. 시각 회귀는 사용자 육안(스크린샷, elevated).
+- **커밋**: `style(ui): single glass layer, unified elevation, slim topbar`
+
+#### 8.4 · EventFilter 확장 (C-백엔드) — query 경로만
+- `model.rs`/`ipc.rs` `EventFilter`에 추가: `ops: Option<Vec<String>>`(op 키: write/delete/set_value/create_key…), `proto: Option<Proto>`, `direction: Option<NetDir>`, `port_min/port_max: Option<u16>`, `node_ids: Option<Vec<u64>>` + `include_subtree: bool`. findings는 `get_findings`에 `min_severity`.
+- `store::query`에 매칭 추가(기존 필터와 AND). op = `EventKind`별 op 문자열. 서브트리 = tracker 자식 전개. **collapse(dedup)보다 필터 먼저** 적용.
+- field-scoped text: `host:`/`path:`/`port:` 접두 파싱(서버, 가볍게).
+- **건드리는 파일**: `model.rs`, `store.rs`(query), `ipc.rs`(get_findings severity), `lib/types.ts`(미러).
+- **게이트**: `cargo check` · `cargo test --lib`(신규 4~6: op/proto/port/subtree/severity/field-scope) · tsc.
+- **커밋**: `feat(query): faceted EventFilter (op, proto/dir/port, subtree, severity, field-scope)`
+
+#### 8.5 · facet UI + 트리아지 프리셋 (C-프론트)
+- `EventsTable` toolbar → **2단 facet 바**: 1행 카테고리 chip(현행) → 선택 시 2행 op 멀티셀렉트(File: create/open/read/write/delete/rename · Reg: set_value/create_key/… · Net: TCP·UDP·Out·In·포트 · DNS: qtype). 기존 pill 패턴(`EventsTable.tsx` evidence/ts pill) 확장.
+- **프리셋 퀵필터**(휴리스틱과 라벨 일치): "지속성"(reg set_value+Run키), "egress"(net outbound), "드롭"(file write/create, temp 제외), "자가삭제". 클릭=facet 조합 세팅.
+- FindingsPanel: `min_severity` 필터 칩(정렬+필터). 트리 노드 선택 시 "이 서브트리" 스코프 토글.
+- **건드리는 파일**: `components/EventsTable.tsx`, `components/FindingsPanel.tsx`, `components/FacetBar.tsx`(신규), `lib/events.ts`(op 메타/프리셋), `lib/ipc.ts`, `app.css`.
+- **게이트**: tsc/build. 회귀: evidence/ts/node pill·collapse·hide_noise 공존.
+- **커밋**: `feat(ui): two-level facet filtering + triage presets + severity filter`
+
+---
+
+### 8단계 인수 기준
+- [ ] `npx tsc --noEmit` · `npm run build` 클린; `cargo check` · `cargo test --lib`(신규 query 테스트 포함) 통과.
+- [ ] 회귀 체크리스트 통과: evidence 점프 · timeline brush→ts · node/서브트리 필터 · collapse · hide_noise · deep(Inspector 경유) · export.
+- [ ] 상시 glass 1겹(topbar) + 맥락 Inspector; 탭 4개; facet 2단 + 프리셋 동작(사용자 elevated 스크린샷 확인).
+
+### 8단계 리스크/주의
+1. **collapse × 필터 순서**: collapse 재집계가 필터 적용 후 dedup이 되도록(`store::query` 순서). 단위테스트로 고정.
+2. **Deep 접근성**: 탭 제거가 deep 데이터 가시성을 낮추지 않게 8.2 Inspector 노출과 묶어 검증.
+3. **토큰 규율**: accent 1개 외 색 추가 자제 — category/severity 팔레트 불변.
+
+---
+
 ## 최종 인수 기준 결과
 - [x] `cargo check` + 기존 smoke 테스트(compile, 5 elevated ignored) + **신규 단위 테스트 24개** 통과.
 - [x] `npm run build` + `npx tsc --noEmit` 클린.
