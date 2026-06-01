@@ -18,6 +18,7 @@ import { GraphView } from "./components/GraphView";
 import { Inspector } from "./components/Inspector";
 import { IocPanel } from "./components/IocPanel";
 import { ProcessTree } from "./components/ProcessTree";
+import { Segmented, type SegOption } from "./components/Segmented";
 import { TimelineView } from "./components/TimelineView";
 import { TopBar } from "./components/TopBar";
 import { VerdictPanel } from "./components/VerdictPanel";
@@ -42,7 +43,12 @@ import type {
   ScentEvent,
 } from "./lib/types";
 
-type Tab = "findings" | "events" | "graph" | "timeline" | "ioc" | "deep" | "verdict";
+// Four top-level destinations. Evidence (the raw telemetry) is one place with a
+// segmented lens switch — Table / Graph / Timeline are projections of the SAME
+// event stream, and Deep (caller attribution) appears as a 4th lens only when it
+// has data. This restores the hierarchy the old 7 flat tabs flattened.
+type Tab = "findings" | "evidence" | "ioc" | "verdict";
+type EvidenceView = "table" | "graph" | "timeline" | "deep";
 
 const EMPTY_STATUS: CaptureStatus = {
   running: false,
@@ -77,6 +83,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>("findings");
+  const [evidenceView, setEvidenceView] = useState<EvidenceView>("table");
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ScentEvent | null>(null);
   const [selectedDeep, setSelectedDeep] = useState<DeepFinding | null>(null);
@@ -149,6 +156,7 @@ export default function App() {
     setFindings([]);
     setEvidenceIds(null);
     setTsRange(null);
+    setEvidenceView("table");
     lastDeepCount.current = -1;
     lastFindingsVersion.current = -1;
     try {
@@ -233,14 +241,37 @@ export default function App() {
     setTsRange(null);
     setEventCategory(null);
     setSelectedNodeId(null);
-    setTab("events");
+    setTab("evidence");
+    setEvidenceView("table");
   }, []);
 
   const onBrush = useCallback((range: { from: number; to: number }) => {
     setTsRange(range);
     setEvidenceIds(null);
-    setTab("events");
+    setTab("evidence");
+    setEvidenceView("table");
   }, []);
+
+  const evidenceOptions = useMemo<SegOption<EvidenceView>[]>(() => {
+    const opts: SegOption<EvidenceView>[] = [
+      { id: "table", label: "Table", icon: <Table2 size={13} /> },
+      { id: "graph", label: "Graph", icon: <Network size={13} /> },
+      { id: "timeline", label: "Timeline", icon: <GitBranch size={13} /> },
+    ];
+    if (status.deep_count > 0) {
+      opts.push({
+        id: "deep",
+        label: "Deep",
+        icon: <Crosshair size={13} />,
+        badge: status.deep_count,
+      });
+    }
+    return opts;
+  }, [status.deep_count]);
+
+  // Fall back to the table lens if Deep loses its data (e.g. a fresh capture).
+  const evView: EvidenceView =
+    evidenceView === "deep" && status.deep_count === 0 ? "table" : evidenceView;
 
   const selectedNode = selectedNodeId != null ? nodesById.get(selectedNodeId) ?? null : null;
   const banner = error ?? status.admin_error;
@@ -288,25 +319,28 @@ export default function App() {
                 <span className="tab__badge tnum">{status.findings_count}</span>
               )}
             </TabButton>
-            <TabButton id="events" tab={tab} setTab={setTab} icon={<Table2 size={14} />}>
-              Events
-            </TabButton>
-            <TabButton id="graph" tab={tab} setTab={setTab} icon={<Network size={14} />}>
-              Graph
-            </TabButton>
-            <TabButton id="timeline" tab={tab} setTab={setTab} icon={<GitBranch size={14} />}>
-              Timeline
+            <TabButton id="evidence" tab={tab} setTab={setTab} icon={<Table2 size={14} />}>
+              Evidence
             </TabButton>
             <TabButton id="ioc" tab={tab} setTab={setTab} icon={<Fingerprint size={14} />}>
               IOCs
             </TabButton>
-            <TabButton id="deep" tab={tab} setTab={setTab} icon={<Crosshair size={14} />}>
-              Deep
-              {status.deep_count > 0 && <span className="tab__badge tnum">{status.deep_count}</span>}
-            </TabButton>
             <TabButton id="verdict" tab={tab} setTab={setTab} icon={<Sparkles size={14} />}>
               Verdict
             </TabButton>
+
+            {tab === "evidence" && (
+              <>
+                <span className="tabs__div" />
+                <Segmented
+                  value={evView}
+                  options={evidenceOptions}
+                  onChange={setEvidenceView}
+                  layoutId="evidence-lens"
+                />
+              </>
+            )}
+
             <div className="tabs__spacer" />
             <ExportMenu disabled={status.total_events === 0} />
           </div>
@@ -322,7 +356,7 @@ export default function App() {
                 onShowEvidence={showEvidence}
               />
             )}
-            {tab === "events" && (
+            {tab === "evidence" && evView === "table" && (
               <EventsTable
                 category={eventCategory}
                 onCategory={setEventCategory}
@@ -340,7 +374,7 @@ export default function App() {
                 onSelectEvent={selectEvent}
               />
             )}
-            {tab === "graph" && (
+            {tab === "evidence" && evView === "graph" && (
               <GraphView
                 tree={tree}
                 selectedNodeId={selectedNodeId}
@@ -348,7 +382,7 @@ export default function App() {
                 onSelectNode={selectNode}
               />
             )}
-            {tab === "timeline" && (
+            {tab === "evidence" && evView === "timeline" && (
               <TimelineView
                 status={status}
                 findings={findings}
@@ -356,9 +390,7 @@ export default function App() {
                 onBrush={onBrush}
               />
             )}
-            {tab === "ioc" && <IocPanel liveTotal={status.total_events} />}
-            {tab === "verdict" && <VerdictPanel hasCapture={status.total_events > 0} />}
-            {tab === "deep" && (
+            {tab === "evidence" && evView === "deep" && (
               <DeepPanel
                 findings={deepFindings}
                 nodesById={nodesById}
@@ -366,6 +398,8 @@ export default function App() {
                 onSelect={selectDeep}
               />
             )}
+            {tab === "ioc" && <IocPanel liveTotal={status.total_events} />}
+            {tab === "verdict" && <VerdictPanel hasCapture={status.total_events > 0} />}
           </div>
         </div>
 
