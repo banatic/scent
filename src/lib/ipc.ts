@@ -13,6 +13,7 @@ import type {
   DeepFinding,
   EventFilter,
   EventPage,
+  Finding,
   ProcessTree,
   ScentEvent,
   StartInfo,
@@ -30,6 +31,10 @@ export function startCapture(
 
 export function getDeepFindings(): Promise<DeepFinding[]> {
   return invoke<DeepFinding[]>("get_deep_findings");
+}
+
+export function getFindings(): Promise<Finding[]> {
+  return invoke<Finding[]>("get_findings");
 }
 
 export function stopCapture(): Promise<void> {

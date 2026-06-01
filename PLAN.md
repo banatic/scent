@@ -108,18 +108,18 @@
 
 ---
 
-## 6단계 · UI 판정-우선 재편 (`src/`)
+## 6단계 · UI 판정-우선 재편 (`src/`) ✅
 **목표**: 판정이 먼저 보이되 raw는 항상 접근 가능. 토큰·모션·glass 규칙 준수.
 
-- [ ] **types/ipc**: `lib/types.ts`에 `Finding`/`Severity`(백엔드 serde와 정확 일치), `lib/ipc.ts`에 `getFindings` + `findings_version` 구독.
-- [ ] **FindingsPanel**(신규, **기본 랜딩 탭**): severity 정렬 카드(배지+기법명+ATT&CK 칩+평문 한 줄+책임 프로세스). "증거 보기" → `event_ids` 필터로 EventsTable 점프. raw 이벤트 탭은 뒤로 이동.
-- [ ] **ProcessTree/TreeNode**: max-severity 색/배지 + 기법 칩 + 핫 브랜치 강조. **`tokens.css`에 `--sev-*` 토큰 신설**(data 색이므로 허용).
-- [ ] **TimelineView**: finding 마커 레인 추가, 비커닝은 규칙적 연결 점 시각화, brush 구간선택 → 전역 필터.
-- [ ] **GraphView(@xyflow)**: "인과 행위 사슬"(process→dropped file→persistence reg→network) 타입드 엣지(spawned/wrote/persisted/connected) 옵션 + Finding 오버레이.
-- [ ] **IocPanel**(신규): 도메인/IP/드롭경로(+해시 있으면)/reg키 자동수집 + 디팽 텍스트·CSV 복사(exporter와 일관).
-- [ ] **건드리는 파일**: `App.tsx`, `components/FindingsPanel.tsx`·`IocPanel.tsx`(신규), `TreeNode.tsx`, `TimelineView.tsx`, `GraphView.tsx`, `EventsTable.tsx`, `lib/types.ts`·`ipc.ts`·`events.ts`, `styles/tokens.css`·`app.css`.
-- [ ] **검증**: `npm run build` + `npx tsc --noEmit` 클린.
-- [ ] **커밋**: `feat(ui): verdict-first FindingsPanel, severity tree, IOC panel, timeline/graph overlays`
+- [x] **types/ipc**: `lib/types.ts`에 `Finding`/`Severity`/`FindingSource`(백엔드 serde 일치) + status/delta 신필드 + `EventFilter.event_ids/ts_from/ts_to` + `ProcessNode.suspicion`. `lib/ipc.ts` `getFindings`. `App.tsx` `findings_version` 구독(변할 때만 refetch).
+- [x] **FindingsPanel**(신규, **기본 랜딩 탭**): suspicion 점수 + severity 정렬 카드(배지+기법명+ATT&CK 칩+평문+책임 프로세스). "증거 보기" → `event_ids` 필터로 Events 탭 점프(필터 칩). 빈 상태는 "raw 항상 가용" 강조.
+- [x] **ProcessTree/TreeNode**: 직접 max-severity 점수 배지 + 핫 브랜치(조상 전파) 좌측 엣지. **`tokens.css` `--sev-*` 토큰 신설**.
+- [x] **TimelineView**: 상단 finding 마커 레인, 비커닝 evidence 연결선(network 트랙), drag **brush 구간선택 → ts 범위 전역 필터**(Events 탭 칩). click=최근접 이벤트 선택.
+- [x] **GraphView(@xyflow)**: process 노드 severity 색 오버레이 + 타입드 엣지 라벨(spawned/wrote/persisted/connected/resolved/loaded).
+- [x] **IocPanel**(신규): 도메인/외부IP/드롭파일/persistence reg키 자동수집 + 디팽 텍스트·CSV 클립보드 복사.
+- [x] **건드리는 파일**: `App.tsx`, `FindingsPanel.tsx`·`IocPanel.tsx`(신규), `lib/findings.ts`(신규), `TreeNode.tsx`·`ProcessTree.tsx`, `TimelineView.tsx`, `GraphView.tsx`, `EventsTable.tsx`, `lib/types.ts`·`ipc.ts`, `styles/tokens.css`·`app.css`, `store.rs`(ts 범위 필터).
+- [x] **검증**: `npx tsc --noEmit` 클린 · `npm run build` 성공 · `cargo test --lib` 24 통과.
+- [x] **커밋**: `feat(ui): verdict-first FindingsPanel, severity tree, IOC panel, timeline/graph overlays`
 
 ---
 

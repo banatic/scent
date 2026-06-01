@@ -146,6 +146,9 @@ pub struct EventFilter {
     pub collapse: Option<bool>,
     /// Restrict to specific event ids (a finding's evidence — "show evidence" jump).
     pub event_ids: Option<Vec<u64>>,
+    /// Capture-relative time window (ms), inclusive — the timeline brush selection.
+    pub ts_from: Option<u64>,
+    pub ts_to: Option<u64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -679,6 +682,16 @@ impl Capture {
         let matches = |e: &Event| -> bool {
             if let Some(ids) = &filter.event_ids {
                 if !ids.contains(&e.id) {
+                    return false;
+                }
+            }
+            if let Some(from) = filter.ts_from {
+                if e.ts_ms < from {
+                    return false;
+                }
+            }
+            if let Some(to) = filter.ts_to {
+                if e.ts_ms > to {
                     return false;
                 }
             }

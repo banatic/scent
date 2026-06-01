@@ -15,18 +15,30 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { CATEGORY_META, CATEGORY_ORDER, describeEvent } from "../lib/events";
+import { SEVERITY_META } from "../lib/findings";
 import { queryEvents } from "../lib/ipc";
-import type { Category, ProcessTree as ProcessTreeData, ScentEvent } from "../lib/types";
+import type { Category, ProcessTree as ProcessTreeData, ScentEvent, Severity } from "../lib/types";
 
 const PER_CATEGORY_CAP = 10;
+
+// Action verb per category → typed causal edge (process → resource).
+const EDGE_VERB: Record<Category, string> = {
+  process: "spawned",
+  file: "wrote",
+  registry: "persisted",
+  network: "connected",
+  dns: "resolved",
+  module: "loaded",
+};
 
 interface GraphViewProps {
   tree: ProcessTreeData | null;
   selectedNodeId: number | null;
+  nodeSeverity: Map<number, Severity>;
   onSelectNode: (id: number) => void;
 }
 
-export function GraphView({ tree, selectedNodeId, onSelectNode }: GraphViewProps) {
+export function GraphView({ tree, selectedNodeId, nodeSeverity, onSelectNode }: GraphViewProps) {
   const [resources, setResources] = useState<ScentEvent[]>([]);
 
   // Fetch the selected process's events to derive its resource nodes.
@@ -63,11 +75,13 @@ export function GraphView({ tree, selectedNodeId, onSelectNode }: GraphViewProps
       if (!n) return;
       const row = depthCount[depth] ?? 0;
       depthCount[depth] = row + 1;
+      const sev = nodeSeverity.get(id);
+      const pcolor = sev ? SEVERITY_META[sev].color : "var(--cat-process)";
       nodes.push({
         id: `p${id}`,
         position: { x: depth * 230, y: row * 84 },
         data: { label: `${n.name}  ·  ${n.pid}` },
-        style: nodeStyle("var(--cat-process)", selectedNodeId === id),
+        style: nodeStyle(pcolor, selectedNodeId === id),
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
       });
@@ -76,6 +90,9 @@ export function GraphView({ tree, selectedNodeId, onSelectNode }: GraphViewProps
           id: `e-p${n.parent_node_id}-p${id}`,
           source: `p${n.parent_node_id}`,
           target: `p${id}`,
+          label: EDGE_VERB.process,
+          labelStyle: { fill: "var(--ink-3)", fontSize: 10 },
+          labelBgStyle: { fill: "var(--surface-1)" },
           style: { stroke: "var(--cat-process)", strokeWidth: 1.5 },
         });
       }
@@ -111,6 +128,9 @@ export function GraphView({ tree, selectedNodeId, onSelectNode }: GraphViewProps
             id: `e-sel-${rid}`,
             source: `p${selectedNodeId}`,
             target: rid,
+            label: EDGE_VERB[c],
+            labelStyle: { fill: "var(--ink-3)", fontSize: 10 },
+            labelBgStyle: { fill: "var(--surface-1)" },
             style: { stroke: CATEGORY_META[c].color, strokeWidth: 1, opacity: 0.7 },
           });
           row += 1;
@@ -119,7 +139,7 @@ export function GraphView({ tree, selectedNodeId, onSelectNode }: GraphViewProps
     }
 
     return { nodes, edges };
-  }, [tree, selectedNodeId, resources]);
+  }, [tree, selectedNodeId, resources, nodeSeverity]);
 
   if (!tree || tree.nodes.length === 0) {
     return <div className="view-empty">No capture yet — the causal graph appears here.</div>;

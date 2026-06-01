@@ -38,6 +38,30 @@ export interface ProcessNode {
   exit_code: number | null;
   event_count: number;
   counts: CategoryCounts;
+  /** Accumulated Σ severity weight of findings attributed to this node. */
+  suspicion: number;
+}
+
+// ---- Findings (mirrors model.rs Finding / Severity / FindingSource) ---------
+export type Severity = "info" | "low" | "med" | "high" | "critical";
+
+export type FindingSource =
+  | { type: "sigma"; rule_id: string }
+  | { type: "stateful"; kind: string }
+  | { type: "deep" };
+
+export interface Finding {
+  id: number;
+  ts_ms: number;
+  /** ATT&CK technique ids (e.g. "T1059.001"). */
+  technique: string[];
+  severity: Severity;
+  title: string;
+  description: string;
+  actor_node: number | null;
+  source: FindingSource;
+  /** Event ids that justify the finding (drives the "show evidence" jump). */
+  evidence: number[];
 }
 
 export interface ProcessTree {
@@ -85,6 +109,9 @@ export interface CaptureStatus {
   tree_version: number;
   counts: CategoryCounts;
   deep_count: number;
+  findings_count: number;
+  findings_version: number;
+  suspicion: number;
   admin_error: string | null;
 }
 
@@ -97,6 +124,9 @@ export interface CaptureDelta {
   tree_version: number;
   counts: CategoryCounts;
   deep_count: number;
+  findings_count: number;
+  findings_version: number;
+  suspicion: number;
 }
 
 /** One resolved call-stack frame. */
@@ -129,6 +159,11 @@ export interface EventFilter {
   text?: string | null;
   hide_noise?: boolean | null;
   collapse?: boolean | null;
+  /** Restrict to specific event ids (a finding's evidence). */
+  event_ids?: number[] | null;
+  /** Capture-relative time window (ms), inclusive — timeline brush. */
+  ts_from?: number | null;
+  ts_to?: number | null;
 }
 
 export interface EventPage {

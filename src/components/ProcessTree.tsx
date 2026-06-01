@@ -5,13 +5,15 @@
 import { useMemo } from "react";
 import { GitBranch } from "lucide-react";
 
-import type { ProcessNode, ProcessTree as ProcessTreeData } from "../lib/types";
+import type { ProcessNode, ProcessTree as ProcessTreeData, Severity } from "../lib/types";
 import { TreeNode } from "./TreeNode";
 
 interface ProcessTreeProps {
   tree: ProcessTreeData | null;
   selectedId: number | null;
   expanded: Set<number>;
+  nodeSeverity: Map<number, Severity>;
+  branchSeverity: Map<number, Severity>;
   onSelect: (id: number) => void;
   onToggle: (id: number) => void;
 }
@@ -31,6 +33,8 @@ export function ProcessTree({
   tree,
   selectedId,
   expanded,
+  nodeSeverity,
+  branchSeverity,
   onSelect,
   onToggle,
 }: ProcessTreeProps) {
@@ -61,6 +65,8 @@ export function ProcessTree({
             depth={0}
             selectedId={selectedId}
             expanded={expanded}
+            nodeSeverity={nodeSeverity}
+            branchSeverity={branchSeverity}
             onSelect={onSelect}
             onToggle={onToggle}
           />

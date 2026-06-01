@@ -64,6 +64,19 @@
   --status-running: #34c759;
   --status-exited: #8a9099;
   --status-alert: #ff6b5e;
+
+  /* ---- Severity palette (data — drives findings/tree verdict color) -------- */
+  --sev-info: #8aa0b6;
+  --sev-low: #6ea8fe;
+  --sev-med: #f7b955;
+  --sev-high: #ff8a4c;
+  --sev-critical: #ff5a5f;
+  /* Tinted fills for severity surfaces (badges, card edges). */
+  --sev-info-soft: rgba(138, 160, 182, 0.16);
+  --sev-low-soft: rgba(110, 168, 254, 0.16);
+  --sev-med-soft: rgba(247, 185, 85, 0.18);
+  --sev-high-soft: rgba(255, 138, 76, 0.18);
+  --sev-critical-soft: rgba(255, 90, 95, 0.2);
 }
 
 /* ---- Light theme (default) ------------------------------------------------- */

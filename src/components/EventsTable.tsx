@@ -9,6 +9,7 @@ import { EyeOff, Layers, Search, X } from "lucide-react";
 import { CATEGORY_META, CATEGORY_ORDER, describeEvent, formatTime, highlightOf } from "../lib/events";
 import { queryEvents } from "../lib/ipc";
 import type { Category, ProcessNode, ScentEvent } from "../lib/types";
+import { Crosshair, Timer } from "lucide-react";
 
 const PAGE = 500;
 
@@ -19,6 +20,12 @@ interface EventsTableProps {
   onText: (t: string) => void;
   nodeFilter: number | null;
   onClearNodeFilter: () => void;
+  /** Restrict to a finding's evidence event ids ("show evidence" jump). */
+  evidenceIds: number[] | null;
+  onClearEvidence: () => void;
+  /** Timeline brush selection (capture-relative ms). */
+  tsRange: { from: number; to: number } | null;
+  onClearTsRange: () => void;
   nodesById: Map<number, ProcessNode>;
   liveTotal: number;
   selectedEventId: number | null;
@@ -32,6 +39,10 @@ export function EventsTable({
   onText,
   nodeFilter,
   onClearNodeFilter,
+  evidenceIds,
+  onClearEvidence,
+  tsRange,
+  onClearTsRange,
   nodesById,
   liveTotal,
   selectedEventId,
@@ -57,8 +68,11 @@ export function EventsTable({
       text: debouncedText || null,
       hide_noise: hideNoise,
       collapse,
+      event_ids: evidenceIds,
+      ts_from: tsRange?.from ?? null,
+      ts_to: tsRange?.to ?? null,
     }),
-    [category, nodeFilter, debouncedText, hideNoise, collapse],
+    [category, nodeFilter, debouncedText, hideNoise, collapse, evidenceIds, tsRange],
   );
 
   const loadFrom = useCallback(
@@ -131,6 +145,22 @@ export function EventsTable({
         {nodeFilter != null && (
           <button className="chip chip--filter" onClick={onClearNodeFilter}>
             {nodesById.get(nodeFilter)?.name ?? `node ${nodeFilter}`}
+            <X size={12} />
+          </button>
+        )}
+
+        {evidenceIds != null && (
+          <button className="chip chip--filter" onClick={onClearEvidence} title="finding evidence">
+            <Crosshair size={12} />
+            evidence ({evidenceIds.length})
+            <X size={12} />
+          </button>
+        )}
+
+        {tsRange != null && (
+          <button className="chip chip--filter" onClick={onClearTsRange} title="timeline selection">
+            <Timer size={12} />
+            {formatTime(tsRange.from)}–{formatTime(tsRange.to)}
             <X size={12} />
           </button>
         )}
