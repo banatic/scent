@@ -597,6 +597,94 @@
   min-width: 40px;
   text-align: right;
 }
+
+/* ---- Facet bar (Events second toolbar row) — DATA surface, no glass -------- */
+.facets {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 0.5px solid var(--hairline);
+  background: var(--surface-2);
+}
+.facets__group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+.facets__group--end {
+  margin-left: auto;
+}
+.facets__lead {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  margin-right: var(--sp-1);
+}
+.facets__div {
+  width: 0.5px;
+  height: 16px;
+  background: var(--hairline-strong);
+  margin: 0 var(--sp-1);
+}
+.facet-preset {
+  height: 24px;
+  padding: 0 10px;
+  border: 0.5px solid var(--hairline-strong);
+  border-radius: var(--r-1);
+  background: var(--surface-1);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.facet-preset:hover {
+  color: var(--ink-1);
+  border-color: var(--accent);
+}
+.facet-chip {
+  height: 24px;
+  padding: 0 10px;
+  border: 0.5px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.facet-chip:hover {
+  color: var(--ink-1);
+}
+.facet-chip--on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink-1);
+}
+.facet-port {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.facet-port input {
+  width: 58px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0.5px solid var(--hairline-strong);
+  border-radius: var(--r-1);
+  background: var(--surface-1);
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+}
+.facet-port input::placeholder {
+  color: var(--ink-3);
+}
+.facet-port__dash {
+  color: var(--ink-3);
+}
+
 .events__table {
   flex: 1 1 auto;
   min-height: 0;
@@ -1104,10 +1192,18 @@
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
+  border: 0.5px solid transparent;
   border-radius: var(--r-pill);
   font-size: var(--fs-2xs);
   color: var(--sev);
   background: var(--sev-soft);
+  cursor: pointer;
+}
+.sev-pill:hover {
+  border-color: var(--sev);
+}
+.sev-pill--dim {
+  opacity: 0.35;
 }
 .findings__list {
   flex: 1 1 auto;

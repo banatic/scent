@@ -4,10 +4,17 @@
 // badge, the technique title, ATT&CK chips, a plain-language line, the responsible
 // process, and a jump to the raw evidence rows.
 
+import { useState } from "react";
 import { ShieldAlert, ShieldCheck } from "lucide-react";
 
 import { formatTime } from "../lib/events";
-import { SEVERITY_META, SEVERITY_ORDER, sortFindings, sourceLabel } from "../lib/findings";
+import {
+  SEVERITY_META,
+  SEVERITY_ORDER,
+  severityRank,
+  sortFindings,
+  sourceLabel,
+} from "../lib/findings";
 import type { Finding, ProcessNode, Severity } from "../lib/types";
 
 interface FindingsPanelProps {
@@ -27,6 +34,8 @@ export function FindingsPanel({
   onSelectFinding,
   onShowEvidence,
 }: FindingsPanelProps) {
+  const [minSeverity, setMinSeverity] = useState<Severity | null>(null);
+
   if (findings.length === 0) {
     return (
       <div className="view-empty findings-empty">
@@ -42,6 +51,9 @@ export function FindingsPanel({
   }
 
   const sorted = sortFindings(findings);
+  const visible = minSeverity
+    ? sorted.filter((f) => severityRank(f.severity) >= severityRank(minSeverity))
+    : sorted;
   const tally = SEVERITY_ORDER.map((s) => ({
     sev: s,
     n: findings.filter((f) => f.severity === s).length,
@@ -55,16 +67,26 @@ export function FindingsPanel({
           {suspicion}
         </span>
         <span className="findings__score-label">suspicion</span>
-        <div className="findings__tally">
+        <div className="findings__tally" role="group" aria-label="Filter by minimum severity">
           {tally.map(({ sev, n }) => (
-            <SeverityPill key={sev} sev={sev} count={n} />
+            <SeverityPill
+              key={sev}
+              sev={sev}
+              count={n}
+              dimmed={minSeverity != null && severityRank(sev) < severityRank(minSeverity)}
+              onClick={() => setMinSeverity((cur) => (cur === sev ? null : sev))}
+            />
           ))}
         </div>
-        <span className="events__count tnum">{findings.length}</span>
+        <span className="events__count tnum">
+          {visible.length < findings.length
+            ? `${visible.length} / ${findings.length}`
+            : findings.length}
+        </span>
       </div>
 
       <div className="findings__list scroll">
-        {sorted.map((f) => (
+        {visible.map((f) => (
           <FindingCard
             key={f.id}
             f={f}
@@ -85,15 +107,28 @@ function procLabel(f: Finding, nodesById: Map<number, ProcessNode>): string | nu
   return n ? `${n.name} · ${n.pid}` : `node ${f.actor_node}`;
 }
 
-function SeverityPill({ sev, count }: { sev: Severity; count: number }) {
+function SeverityPill({
+  sev,
+  count,
+  dimmed,
+  onClick,
+}: {
+  sev: Severity;
+  count: number;
+  dimmed: boolean;
+  onClick: () => void;
+}) {
   const m = SEVERITY_META[sev];
   return (
-    <span
-      className="sev-pill tnum"
+    <button
+      type="button"
+      className={`sev-pill tnum${dimmed ? " sev-pill--dim" : ""}`}
       style={{ ["--sev" as string]: m.color, ["--sev-soft" as string]: m.soft }}
+      onClick={onClick}
+      title={`Show ≥ ${m.label}`}
     >
       {count} {m.label}
-    </span>
+    </button>
   );
 }
 

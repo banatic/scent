@@ -1,6 +1,6 @@
 // Presentation helpers for events + categories, shared across views.
 
-import type { Category, ScentEvent } from "./types";
+import type { Category, NetDir, Proto, ScentEvent } from "./types";
 
 export const CATEGORY_META: Record<
   Category,
@@ -21,6 +21,91 @@ export const CATEGORY_ORDER: Category[] = [
   "network",
   "dns",
   "module",
+];
+
+// ---- Faceted filtering (Phase 8.5) -----------------------------------------
+// UI-side aggregate of the new EventFilter facets. App owns one of these and
+// resets it on cross-view jumps so a stale facet never hides evidence.
+export interface Facets {
+  ops: string[];
+  proto: Proto | null;
+  direction: NetDir | null;
+  portMin: number | null;
+  portMax: number | null;
+  includeSubtree: boolean;
+}
+
+export const EMPTY_FACETS: Facets = {
+  ops: [],
+  proto: null,
+  direction: null,
+  portMin: null,
+  portMax: null,
+  includeSubtree: false,
+};
+
+/** Per-category operation facets (file/registry op tokens — match the backend). */
+export const OP_FACETS: Partial<Record<Category, { id: string; label: string }[]>> = {
+  file: [
+    { id: "create", label: "Create" },
+    { id: "write", label: "Write" },
+    { id: "delete", label: "Delete" },
+    { id: "rename", label: "Rename" },
+    { id: "read", label: "Read" },
+    { id: "open", label: "Open" },
+  ],
+  registry: [
+    { id: "set_value", label: "SetValue" },
+    { id: "create_key", label: "CreateKey" },
+    { id: "delete_value", label: "DeleteValue" },
+    { id: "delete_key", label: "DeleteKey" },
+  ],
+};
+
+/** Triage quick-filters — each sets a category + facet combination an analyst
+ *  reaches for. Honest about what the sensor can express (no path negation). */
+export interface Preset {
+  id: string;
+  label: string;
+  hint: string;
+  category: Category | null;
+  text: string;
+  facets: Partial<Facets>;
+}
+
+export const TRIAGE_PRESETS: Preset[] = [
+  {
+    id: "persistence",
+    label: "Persistence",
+    hint: "registry writes under Run keys",
+    category: "registry",
+    text: "path:\\run",
+    facets: { ops: ["set_value", "create_key"] },
+  },
+  {
+    id: "egress",
+    label: "Egress",
+    hint: "outbound network connections",
+    category: "network",
+    text: "",
+    facets: { direction: "outbound" },
+  },
+  {
+    id: "drops",
+    label: "Drops",
+    hint: "files created or written",
+    category: "file",
+    text: "",
+    facets: { ops: ["write", "create"] },
+  },
+  {
+    id: "deletes",
+    label: "Deletes",
+    hint: "file deletes / renames (anti-forensics, self-delete)",
+    category: "file",
+    text: "",
+    facets: { ops: ["delete", "rename"] },
+  },
 ];
 
 const DNS_TYPES: Record<number, string> = {

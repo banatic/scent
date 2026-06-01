@@ -23,6 +23,7 @@ import { Segmented, type SegOption } from "./components/Segmented";
 import { TimelineView } from "./components/TimelineView";
 import { TopBar } from "./components/TopBar";
 import { VerdictPanel } from "./components/VerdictPanel";
+import { EMPTY_FACETS, type Facets } from "./lib/events";
 import { branchSeverity, directSeverityByNode } from "./lib/findings";
 import { spring } from "./lib/motion";
 import {
@@ -93,6 +94,7 @@ export default function App() {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [eventCategory, setEventCategory] = useState<Category | null>(null);
   const [eventText, setEventText] = useState("");
+  const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   const [deepMode, setDeepMode] = useState(false);
   const [deepFindings, setDeepFindings] = useState<DeepFinding[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
@@ -158,6 +160,7 @@ export default function App() {
     setFindings([]);
     setEvidenceIds(null);
     setTsRange(null);
+    setFacets(EMPTY_FACETS);
     setEvidenceView("table");
     lastDeepCount.current = -1;
     lastFindingsVersion.current = -1;
@@ -243,6 +246,7 @@ export default function App() {
     setTsRange(null);
     setEventCategory(null);
     setSelectedNodeId(null);
+    setFacets(EMPTY_FACETS);
     setTab("evidence");
     setEvidenceView("table");
   }, []);
@@ -250,6 +254,7 @@ export default function App() {
   const onBrush = useCallback((range: { from: number; to: number }) => {
     setTsRange(range);
     setEvidenceIds(null);
+    setFacets(EMPTY_FACETS);
     setTab("evidence");
     setEvidenceView("table");
   }, []);
@@ -388,6 +393,8 @@ export default function App() {
                 onClearEvidence={() => setEvidenceIds(null)}
                 tsRange={tsRange}
                 onClearTsRange={() => setTsRange(null)}
+                facets={facets}
+                onFacets={setFacets}
                 nodesById={nodesById}
                 liveTotal={status.total_events}
                 selectedEventId={selectedEvent?.id ?? null}

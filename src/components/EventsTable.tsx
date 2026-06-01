@@ -6,10 +6,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TableVirtuoso } from "react-virtuoso";
 import { EyeOff, Layers, Search, X } from "lucide-react";
 
-import { CATEGORY_META, CATEGORY_ORDER, describeEvent, formatTime, highlightOf } from "../lib/events";
+import {
+  CATEGORY_META,
+  CATEGORY_ORDER,
+  EMPTY_FACETS,
+  describeEvent,
+  formatTime,
+  highlightOf,
+  type Facets,
+  type Preset,
+} from "../lib/events";
 import { queryEvents } from "../lib/ipc";
-import type { Category, ProcessNode, ScentEvent } from "../lib/types";
+import type { Category, EventFilter, ProcessNode, ScentEvent } from "../lib/types";
 import { Crosshair, Timer } from "lucide-react";
+import { FacetBar, presetFacets } from "./FacetBar";
 
 const PAGE = 500;
 
@@ -26,6 +36,8 @@ interface EventsTableProps {
   /** Timeline brush selection (capture-relative ms). */
   tsRange: { from: number; to: number } | null;
   onClearTsRange: () => void;
+  facets: Facets;
+  onFacets: (f: Facets) => void;
   nodesById: Map<number, ProcessNode>;
   liveTotal: number;
   selectedEventId: number | null;
@@ -43,6 +55,8 @@ export function EventsTable({
   onClearEvidence,
   tsRange,
   onClearTsRange,
+  facets,
+  onFacets,
   nodesById,
   liveTotal,
   selectedEventId,
@@ -61,18 +75,48 @@ export function EventsTable({
     return () => clearTimeout(h);
   }, [text]);
 
-  const filter = useMemo(
-    () => ({
+  const filter = useMemo<EventFilter>(() => {
+    // A node filter + "include subtree" promotes the single node_id to a
+    // subtree scope (node_ids + include_subtree); otherwise it's a single node.
+    const subtree = nodeFilter != null && facets.includeSubtree;
+    return {
       category,
-      node_id: nodeFilter,
+      node_id: subtree ? null : nodeFilter,
+      node_ids: subtree ? [nodeFilter] : null,
+      include_subtree: subtree ? true : null,
       text: debouncedText || null,
       hide_noise: hideNoise,
       collapse,
       event_ids: evidenceIds,
       ts_from: tsRange?.from ?? null,
       ts_to: tsRange?.to ?? null,
-    }),
-    [category, nodeFilter, debouncedText, hideNoise, collapse, evidenceIds, tsRange],
+      ops: facets.ops.length ? facets.ops : null,
+      proto: facets.proto,
+      direction: facets.direction,
+      port_min: facets.portMin,
+      port_max: facets.portMax,
+    };
+  }, [category, nodeFilter, debouncedText, hideNoise, collapse, evidenceIds, tsRange, facets]);
+
+  // Switching category clears facets that don't apply to it (keep node scope).
+  const handleCategory = useCallback(
+    (c: Category | null) => {
+      onCategory(c);
+      onFacets({ ...EMPTY_FACETS, includeSubtree: facets.includeSubtree });
+    },
+    [onCategory, onFacets, facets.includeSubtree],
+  );
+
+  // A preset is a focused fresh view: clear cross-view jumps + set the combo.
+  const applyPreset = useCallback(
+    (p: Preset) => {
+      onClearEvidence();
+      onClearTsRange();
+      onCategory(p.category);
+      onText(p.text);
+      onFacets(presetFacets(p, facets));
+    },
+    [onCategory, onText, onFacets, onClearEvidence, onClearTsRange, facets],
   );
 
   const loadFrom = useCallback(
@@ -125,7 +169,7 @@ export function EventsTable({
         <div className="chips">
           <button
             className={`chip${category === null ? " chip--on" : ""}`}
-            onClick={() => onCategory(null)}
+            onClick={() => handleCategory(null)}
           >
             All
           </button>
@@ -133,7 +177,7 @@ export function EventsTable({
             <button
               key={c}
               className={`chip${category === c ? " chip--on" : ""}`}
-              onClick={() => onCategory(category === c ? null : c)}
+              onClick={() => handleCategory(category === c ? null : c)}
               style={{ "--chip-color": CATEGORY_META[c].color } as React.CSSProperties}
             >
               <span className="chip__dot" />
@@ -201,6 +245,15 @@ export function EventsTable({
           {events.length < total ? `${events.length} / ${total}` : `${total}`}
         </span>
       </div>
+
+      <FacetBar
+        category={category}
+        facets={facets}
+        onFacets={onFacets}
+        onApplyPreset={applyPreset}
+        nodeFilter={nodeFilter}
+        nodeName={nodeFilter != null ? nodesById.get(nodeFilter)?.name : undefined}
+      />
 
       <TableVirtuoso
         className="events__table scroll"
