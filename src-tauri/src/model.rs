@@ -141,6 +141,11 @@ pub struct Finding {
     pub actor_node: Option<u64>,
     pub source: FindingSource,
     pub evidence: Vec<u64>,
+    /// Verbatim indicators resolved from `evidence` (loaded DLL / file / registry
+    /// key / host) so the UI names *which* indicator fired, not just the rule.
+    /// Empty in the raw store; filled only when handed to the frontend.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub evidence_labels: Vec<String>,
 }
 
 /// A node in the captured process tree. PID reuse produces a fresh node, so
@@ -233,6 +238,27 @@ impl EventKind {
             }
             EventKind::ImageLoad { image, .. } => image.to_lowercase(),
         }
+    }
+
+    /// The single most relevant verbatim indicator this event carries (matched
+    /// DLL / file / registry key / host:port / domain), or `None` if it has
+    /// nothing to cite. Used to surface *which* indicator triggered a finding.
+    pub fn indicator(&self) -> Option<String> {
+        Some(match self {
+            EventKind::ImageLoad { image, .. } => image.clone(),
+            EventKind::FileOp { path, .. } => path.clone(),
+            EventKind::RegOp { path, value, .. } => match value {
+                Some(v) if !v.is_empty() => format!("{path}\\{v}"),
+                _ => path.clone(),
+            },
+            EventKind::NetConn { remote, remote_port, .. } => format!("{remote}:{remote_port}"),
+            EventKind::Dns { query, .. } => query.clone(),
+            EventKind::ProcCreate { image, cmdline, .. } => match cmdline {
+                Some(c) if !c.is_empty() => c.clone(),
+                _ => image.clone(),
+            },
+            EventKind::ProcExit { .. } => return None,
+        })
     }
 
     /// Canonical operation token for the per-category op facet (matches the

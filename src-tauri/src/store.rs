@@ -563,6 +563,7 @@ impl Capture {
             actor_node,
             source,
             evidence,
+            evidence_labels: Vec::new(),
         });
         self.findings_version += 1;
     }
@@ -570,6 +571,31 @@ impl Capture {
     /// All findings (for the panel / export).
     pub fn findings(&self) -> &[Finding] {
         &self.findings
+    }
+
+    /// Findings with each `evidence` event id resolved to its verbatim indicator
+    /// (loaded DLL / file / registry key / host) — for the UI, which doesn't hold
+    /// the full event list. Deduped and capped per finding.
+    pub fn findings_for_ui(&self) -> Vec<Finding> {
+        use std::collections::BTreeSet;
+        self.findings
+            .iter()
+            .map(|f| {
+                let mut f = f.clone();
+                let mut seen = BTreeSet::new();
+                for &id in &f.evidence {
+                    let Some(ev) = self.events.get(id as usize) else { continue };
+                    let Some(label) = ev.kind.indicator() else { continue };
+                    if seen.insert(label.clone()) {
+                        f.evidence_labels.push(label);
+                    }
+                    if f.evidence_labels.len() >= 6 {
+                        break;
+                    }
+                }
+                f
+            })
+            .collect()
     }
 
     pub fn set_admin_error(&mut self, msg: String) {

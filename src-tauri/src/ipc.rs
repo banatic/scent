@@ -335,7 +335,7 @@ pub fn get_deep_findings(state: State<AppState>) -> Vec<DeepFinding> {
 
 #[tauri::command]
 pub fn get_findings(state: State<AppState>) -> Vec<Finding> {
-    state.capture.read().findings().to_vec()
+    state.capture.read().findings_for_ui()
 }
 
 /// Build the deterministic LLM-triage bundle (always available; no key needed).

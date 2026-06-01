@@ -162,7 +162,7 @@ fn evidence_summary(cap: &Capture, ids: &[u64]) -> String {
     let mut labels = Vec::new();
     for &id in ids {
         let Some(ev) = events.get(id as usize) else { continue };
-        let Some(label) = evidence_label(&ev.kind) else { continue };
+        let Some(label) = ev.kind.indicator() else { continue };
         if seen.insert(label.clone()) {
             labels.push(label);
         }
@@ -175,27 +175,6 @@ fn evidence_summary(cap: &Capture, ids: &[u64]) -> String {
     } else {
         format!(" | evidence: {}", labels.join("; "))
     }
-}
-
-/// The single most relevant verbatim indicator carried by an event (the matched
-/// path / DLL / key / host), or `None` for events with nothing to cite.
-fn evidence_label(kind: &crate::model::EventKind) -> Option<String> {
-    use crate::model::EventKind;
-    Some(match kind {
-        EventKind::ImageLoad { image, .. } => image.clone(),
-        EventKind::FileOp { path, .. } => path.clone(),
-        EventKind::RegOp { path, value, .. } => match value {
-            Some(v) if !v.is_empty() => format!("{path}\\{v}"),
-            _ => path.clone(),
-        },
-        EventKind::NetConn { remote, remote_port, .. } => format!("{remote}:{remote_port}"),
-        EventKind::Dns { query, .. } => query.clone(),
-        EventKind::ProcCreate { image, cmdline, .. } => match cmdline {
-            Some(c) if !c.is_empty() => c.clone(),
-            _ => image.clone(),
-        },
-        EventKind::ProcExit { .. } => return None,
-    })
 }
 
 fn write_iocs(s: &mut String, label: &str, items: &[String]) {

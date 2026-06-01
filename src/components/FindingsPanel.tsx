@@ -164,6 +164,15 @@ function FindingCard({
           <span className="finding-card__src">{sourceLabel(f)}</span>
         </div>
         {f.description && <p className="finding-card__desc">{f.description}</p>}
+        {f.evidence_labels && f.evidence_labels.length > 0 && (
+          <ul className="finding-card__ind">
+            {f.evidence_labels.map((t) => (
+              <li key={t} title={t}>
+                {t}
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="finding-card__meta">
           {f.technique.map((t) => (
             <span key={t} className="attack-chip">

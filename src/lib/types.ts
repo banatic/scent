@@ -62,6 +62,9 @@ export interface Finding {
   source: FindingSource;
   /** Event ids that justify the finding (drives the "show evidence" jump). */
   evidence: number[];
+  /** Verbatim indicators resolved from `evidence` (loaded DLL / file / registry
+   *  key / host) — names *which* indicator fired. Omitted when empty. */
+  evidence_labels?: string[];
 }
 
 export interface ProcessTree {
