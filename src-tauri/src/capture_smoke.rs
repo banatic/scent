@@ -620,8 +620,8 @@ fn captures_cmd_subtree() {
 
     // Exercise the exporters on the captured data (Phase 4).
     let jsonl = crate::exporter::to_jsonl(cap.events());
-    let html = crate::exporter::to_html(&status, cap.nodes(), cap.events());
-    let md = crate::exporter::to_markdown(&status, cap.nodes(), cap.events());
+    let html = crate::exporter::to_html(&status, cap.nodes(), cap.events(), cap.findings());
+    let md = crate::exporter::to_markdown(&status, cap.nodes(), cap.events(), cap.findings());
     let csv = crate::exporter::to_csv(crate::model::Category::File, cap.events(), cap.nodes());
     println!(
         "exports: jsonl {} lines, html {} bytes, md {} bytes, file-csv {} lines",

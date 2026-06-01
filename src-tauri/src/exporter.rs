@@ -2,8 +2,45 @@
 //! self-contained HTML report (summary + process tree + timeline + event table,
 //! no external dependencies — opens in any browser).
 
-use crate::model::{Category, Event, EventKind, ProcessNode};
+use crate::model::{Category, Event, EventKind, Finding, ProcessNode};
 use crate::store::CaptureStatus;
+
+/// Resolve a finding's evidence event ids to their verbatim target strings
+/// (the matched DLL path / file / registry key / host), deduped and capped — so
+/// a report names *which* indicator triggered each finding, not just the rule.
+fn evidence_targets(events: &[Event], ids: &[u64]) -> Vec<String> {
+    use std::collections::BTreeSet;
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    for &id in ids {
+        let Some(ev) = events.get(id as usize) else { continue };
+        let t = op_target(ev).1;
+        if t.is_empty() {
+            continue;
+        }
+        if seen.insert(t.clone()) {
+            out.push(t);
+        }
+        if out.len() >= 6 {
+            break;
+        }
+    }
+    out
+}
+
+/// Findings, most-severe first (stable on ts for ties) — shared by md/html.
+fn sorted_findings(findings: &[Finding]) -> Vec<&Finding> {
+    let mut fs: Vec<&Finding> = findings.iter().collect();
+    fs.sort_by(|a, b| (b.severity as u8).cmp(&(a.severity as u8)).then(a.ts_ms.cmp(&b.ts_ms)));
+    fs
+}
+
+fn finding_actor(nodes: &[ProcessNode], actor_node: Option<u64>) -> String {
+    actor_node
+        .and_then(|id| nodes.get(id as usize))
+        .map(|n| format!("{} (pid {})", n.name, n.pid))
+        .unwrap_or_else(|| "—".into())
+}
 
 /// (operation verb, target string) for tabular display, mirroring the frontend.
 fn op_target(e: &Event) -> (String, String) {
@@ -88,7 +125,12 @@ pub fn to_csv(category: Category, events: &[Event], nodes: &[ProcessNode]) -> St
 
 // ---- Markdown --------------------------------------------------------------
 
-pub fn to_markdown(status: &CaptureStatus, nodes: &[ProcessNode], _events: &[Event]) -> String {
+pub fn to_markdown(
+    status: &CaptureStatus,
+    nodes: &[ProcessNode],
+    events: &[Event],
+    findings: &[Finding],
+) -> String {
     let c = &status.counts;
     let mut out = String::new();
     out.push_str("# scent capture report\n\n");
@@ -105,6 +147,24 @@ pub fn to_markdown(status: &CaptureStatus, nodes: &[ProcessNode], _events: &[Eve
         "| Process | {} |\n| File | {} |\n| Registry | {} |\n| Network | {} |\n| DNS | {} |\n| Module | {} |\n\n",
         c.process, c.file, c.registry, c.network, c.dns, c.module
     ));
+    out.push_str(&format!("## Findings ({})\n\n", findings.len()));
+    if findings.is_empty() {
+        out.push_str("_No findings._\n\n");
+    } else {
+        for f in sorted_findings(findings) {
+            out.push_str(&format!("- **[{:?}] {}** — {}\n", f.severity, f.title, f.description));
+            let tech = if f.technique.is_empty() { "—".into() } else { f.technique.join(", ") };
+            out.push_str(&format!(
+                "  - technique: {tech} · actor: {}\n",
+                finding_actor(nodes, f.actor_node)
+            ));
+            for t in evidence_targets(events, &f.evidence) {
+                out.push_str(&format!("  - evidence: `{t}`\n"));
+            }
+        }
+        out.push('\n');
+    }
+
     out.push_str("## Process tree\n\n");
     for n in nodes {
         let depth = node_depth(nodes, n);
@@ -150,8 +210,42 @@ fn esc(s: &str) -> String {
 
 const HTML_CAP: usize = 50_000;
 
-pub fn to_html(status: &CaptureStatus, nodes: &[ProcessNode], events: &[Event]) -> String {
+pub fn to_html(
+    status: &CaptureStatus,
+    nodes: &[ProcessNode],
+    events: &[Event],
+    findings: &[Finding],
+) -> String {
     let c = &status.counts;
+
+    // Findings, severity-first, each naming the indicator(s) that triggered it.
+    let mut findings_html = String::new();
+    if findings.is_empty() {
+        findings_html.push_str("<p class=note>No findings.</p>");
+    } else {
+        findings_html.push_str("<ul class=findings>");
+        for f in sorted_findings(findings) {
+            let sev = format!("{:?}", f.severity).to_lowercase();
+            let tech = if f.technique.is_empty() { "—".into() } else { f.technique.join(", ") };
+            findings_html.push_str(&format!(
+                "<li><span class=\"sev sev-{sev}\">{sev}</span> <b>{}</b> — {}<div class=fmeta>{} · {}</div>",
+                esc(&f.title),
+                esc(&f.description),
+                esc(&tech),
+                esc(&finding_actor(nodes, f.actor_node)),
+            ));
+            let ev = evidence_targets(events, &f.evidence);
+            if !ev.is_empty() {
+                findings_html.push_str("<ul class=ev>");
+                for t in ev {
+                    findings_html.push_str(&format!("<li>{}</li>", esc(&t)));
+                }
+                findings_html.push_str("</ul>");
+            }
+            findings_html.push_str("</li>");
+        }
+        findings_html.push_str("</ul>");
+    }
 
     // Process tree as a nested list.
     let mut tree_html = String::from("<ul class=tree>");
@@ -236,6 +330,11 @@ th{{text-align:left;color:var(--ink3);font-size:11px;text-transform:uppercase;pa
 td{{padding:3px 8px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}}
 td.cat{{color:var(--ink3)}}td.tgt{{font-family:ui-monospace,Consolas,monospace;font-size:11px}}
 .tblwrap{{max-height:520px;overflow:auto}}.note{{color:var(--ink3);font-size:12px}}
+.findings{{list-style:none;margin:0;padding:0}}.findings>li{{padding:8px 0;border-bottom:1px solid var(--line)}}.findings>li:last-child{{border-bottom:0}}
+.sev{{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:999px;margin-right:8px;vertical-align:middle}}
+.sev-critical{{background:#5b1f23;color:#ffb3b3}}.sev-high{{background:#5a3210;color:#f7b955}}.sev-med{{background:#4a3a12;color:#e6c34a}}.sev-low{{background:#243447;color:#8aa0b6}}.sev-info{{background:var(--s2);color:var(--ink3)}}
+.fmeta{{color:var(--ink3);font-size:11px;margin:2px 0 0 0}}
+.ev{{margin:6px 0 0 0;padding-left:18px}}.ev li{{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--ink2);word-break:break-all}}
 </style></head><body><div class=wrap>
 <h1>scent capture report</h1>
 <p class=sub>root pid {root} · {dur} ms · {procs} processes · {total} events</p>
@@ -247,6 +346,7 @@ td.cat{{color:var(--ink3)}}td.tgt{{font-family:ui-monospace,Consolas,monospace;f
 <div class=card><div class=v>{cd}</div><div class=k>DNS</div></div>
 <div class=card><div class=v>{cm}</div><div class=k>Module</div></div>
 </div>
+<section><h2>Findings ({nfind})</h2>{findings}</section>
 <section><h2>Process tree</h2>{tree}</section>
 <section><h2>Timeline</h2><canvas id=tl></canvas></section>
 <section><h2>Events ({shown} shown)</h2>
@@ -294,6 +394,8 @@ document.getElementById('q').addEventListener('input',e=>{{fq=e.target.value.toL
         cd = c.dns,
         cm = c.module,
         tree = tree_html,
+        findings = findings_html,
+        nfind = findings.len(),
         shown = shown,
         trunc = trunc_note,
         rows = rows,

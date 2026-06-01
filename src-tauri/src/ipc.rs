@@ -360,12 +360,13 @@ pub fn export_report(state: State<AppState>, format: String, path: String) -> Re
     let status = cap.status();
     let nodes = cap.nodes();
     let events = cap.events();
+    let findings = cap.findings();
     let write = |p: &str, content: String| std::fs::write(p, content).map_err(|e| e.to_string());
 
     match format.as_str() {
         "jsonl" => write(&path, exporter::to_jsonl(events)),
-        "html" => write(&path, exporter::to_html(&status, nodes, events)),
-        "markdown" => write(&path, exporter::to_markdown(&status, nodes, events)),
+        "html" => write(&path, exporter::to_html(&status, nodes, events, findings)),
+        "markdown" => write(&path, exporter::to_markdown(&status, nodes, events, findings)),
         "csv" => {
             let dir = std::path::Path::new(&path);
             for (cat, name) in [

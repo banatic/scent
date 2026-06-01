@@ -127,12 +127,13 @@ fn build_context(cap: &Capture) -> String {
             .unwrap_or_else(|| "-".into());
         let _ = writeln!(
             s,
-            "- [{:?}] {} — {} | technique {} | actor {}",
+            "- [{:?}] {} — {} | technique {} | actor {}{}",
             f.severity,
             f.title,
             f.description,
             if f.technique.is_empty() { "-".into() } else { f.technique.join(",") },
             proc,
+            evidence_summary(cap, &f.evidence),
         );
     }
     if findings.len() > MAX_FINDINGS {
@@ -147,6 +148,54 @@ fn build_context(cap: &Capture) -> String {
     write_iocs(&mut s, "dropped files", &iocs.files);
     write_iocs(&mut s, "persistence registry keys", &iocs.regkeys);
     s
+}
+
+/// Resolve a finding's evidence event ids to a short, verbatim indicator list,
+/// so the reader (and the LLM) sees *which* DLL/file/registry key/host actually
+/// triggered it — e.g. the side-loaded `…\libwazuhshared.dll` behind a Sigma
+/// image_load finding, rather than just the rule title. Returns "" when no
+/// evidence resolves to a printable indicator.
+fn evidence_summary(cap: &Capture, ids: &[u64]) -> String {
+    use std::collections::BTreeSet;
+    let events = cap.events();
+    let mut seen = BTreeSet::new();
+    let mut labels = Vec::new();
+    for &id in ids {
+        let Some(ev) = events.get(id as usize) else { continue };
+        let Some(label) = evidence_label(&ev.kind) else { continue };
+        if seen.insert(label.clone()) {
+            labels.push(label);
+        }
+        if labels.len() >= 6 {
+            break;
+        }
+    }
+    if labels.is_empty() {
+        String::new()
+    } else {
+        format!(" | evidence: {}", labels.join("; "))
+    }
+}
+
+/// The single most relevant verbatim indicator carried by an event (the matched
+/// path / DLL / key / host), or `None` for events with nothing to cite.
+fn evidence_label(kind: &crate::model::EventKind) -> Option<String> {
+    use crate::model::EventKind;
+    Some(match kind {
+        EventKind::ImageLoad { image, .. } => image.clone(),
+        EventKind::FileOp { path, .. } => path.clone(),
+        EventKind::RegOp { path, value, .. } => match value {
+            Some(v) if !v.is_empty() => format!("{path}\\{v}"),
+            _ => path.clone(),
+        },
+        EventKind::NetConn { remote, remote_port, .. } => format!("{remote}:{remote_port}"),
+        EventKind::Dns { query, .. } => query.clone(),
+        EventKind::ProcCreate { image, cmdline, .. } => match cmdline {
+            Some(c) if !c.is_empty() => c.clone(),
+            _ => image.clone(),
+        },
+        EventKind::ProcExit { .. } => return None,
+    })
 }
 
 fn write_iocs(s: &mut String, label: &str, items: &[String]) {
