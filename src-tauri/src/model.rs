@@ -89,6 +89,60 @@ impl CategoryCounts {
     }
 }
 
+/// Triage severity. Ordered (Info < … < Critical) so findings sort by gravity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Info,
+    Low,
+    Med,
+    High,
+    Critical,
+}
+
+impl Severity {
+    /// Suspicion-score contribution (Crit 100 / High 40 / Med 10 / Low 2 / Info 0).
+    pub fn weight(self) -> u64 {
+        match self {
+            Severity::Critical => 100,
+            Severity::High => 40,
+            Severity::Med => 10,
+            Severity::Low => 2,
+            Severity::Info => 0,
+        }
+    }
+}
+
+/// Where a finding came from. Findings are an accelerator over the raw telemetry,
+/// never a gate — the events/tree/timeline stand on their own.
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FindingSource {
+    /// A curated Sigma rule matched.
+    Sigma { rule_id: String },
+    /// A stateful invariant heuristic fired (kind = beaconing / dns_tunnel / …).
+    Stateful { kind: String },
+    /// Promoted from a deep-mode caller attribution.
+    Deep,
+}
+
+/// One triage finding. `evidence` holds the event ids that justify it, so the UI
+/// can jump straight to the raw rows.
+#[derive(Clone, Debug, Serialize)]
+pub struct Finding {
+    pub id: u64,
+    pub ts_ms: u64,
+    /// ATT&CK technique ids (e.g. "T1059.001").
+    pub technique: Vec<String>,
+    pub severity: Severity,
+    pub title: String,
+    pub description: String,
+    /// The responsible process node, when attributable.
+    pub actor_node: Option<u64>,
+    pub source: FindingSource,
+    pub evidence: Vec<u64>,
+}
+
 /// A node in the captured process tree. PID reuse produces a fresh node, so
 /// `node_id` is stable while `pid` is not.
 #[derive(Clone, Debug, Serialize)]
@@ -107,6 +161,8 @@ pub struct ProcessNode {
     pub exit_code: Option<i64>,
     pub event_count: u64,
     pub counts: CategoryCounts,
+    /// Accumulated Σ severity weight of findings attributed to this node.
+    pub suspicion: u64,
 }
 
 /// Category-tagged payload of a captured event.

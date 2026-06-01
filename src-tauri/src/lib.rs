@@ -9,6 +9,7 @@ mod model;
 mod peb;
 mod sigma;
 mod sigma_fields;
+mod stateful;
 mod store;
 mod tracker;
 
@@ -50,6 +51,7 @@ pub fn run() {
             ipc::query_events,
             ipc::get_event_detail,
             ipc::get_deep_findings,
+            ipc::get_findings,
             ipc::export_report
         ])
         .run(tauri::generate_context!())

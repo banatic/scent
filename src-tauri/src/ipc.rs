@@ -20,9 +20,12 @@ use crate::emit::run_emit_loop;
 use crate::etw::{self, EtwState};
 use crate::exporter;
 use crate::launcher::{self, SendHandle};
+use std::sync::OnceLock;
+
 use crate::modmap;
-use crate::model::{Category, Event};
+use crate::model::{Category, Event, Finding};
 use crate::peb;
+use crate::sigma::{self, RuleSet};
 use crate::store::{
     Capture, Captured, CaptureStatus, DeepFinding, EventFilter, EventPage, ProcessTree,
 };
@@ -39,6 +42,8 @@ pub struct CaptureControl {
 pub struct AppState {
     pub capture: Arc<RwLock<Capture>>,
     pub control: Mutex<Option<CaptureControl>>,
+    /// Curated Sigma rules, loaded once on first capture and shared read-only.
+    ruleset: OnceLock<Arc<RuleSet>>,
 }
 
 impl AppState {
@@ -46,7 +51,15 @@ impl AppState {
         Self {
             capture: Arc::new(RwLock::new(Capture::new(std::process::id()))),
             control: Mutex::new(None),
+            ruleset: OnceLock::new(),
         }
+    }
+
+    /// The shared ruleset, loading it (~once, lazily) on first use.
+    fn ruleset(&self) -> Arc<RuleSet> {
+        self.ruleset
+            .get_or_init(|| Arc::new(sigma::load_default_ruleset()))
+            .clone()
     }
 }
 
@@ -141,6 +154,7 @@ pub fn start_capture(
     {
         let capture = state.capture.clone();
         let deep_tracked = deep_tracked.clone();
+        let ruleset = state.ruleset();
         std::thread::spawn(move || {
             while let Ok(first) = raw_rx.recv() {
                 // Drain the burst, then recover child command lines from the PEB
@@ -160,7 +174,11 @@ pub fn start_capture(
                 let live = {
                     let mut w = capture.write();
                     for c in burst {
-                        w.ingest(c);
+                        // Detection (Sigma + heuristics) runs on each stored event
+                        // in this same ingest thread, under the one write lock.
+                        if let Some(id) = w.ingest(c) {
+                            w.detect_event(id, &ruleset);
+                        }
                     }
                     w.live_pids()
                 };
@@ -312,6 +330,11 @@ pub fn get_event_detail(state: State<AppState>, id: u64) -> Option<Event> {
 #[tauri::command]
 pub fn get_deep_findings(state: State<AppState>) -> Vec<DeepFinding> {
     state.capture.read().deep_findings().to_vec()
+}
+
+#[tauri::command]
+pub fn get_findings(state: State<AppState>) -> Vec<Finding> {
+    state.capture.read().findings().to_vec()
 }
 
 /// Write a report. For `jsonl`/`html`/`markdown`, `path` is the target file; for

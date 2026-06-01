@@ -88,22 +88,23 @@
 
 ---
 
-## 5단계 · Finding 모델 + 상태형 탐지 + 저장/점수/IPC
+## 5단계 · Finding 모델 + 상태형 탐지 + 저장/점수/IPC ✅
 **목표**: Sigma 매칭 + 4개 휴리스틱을 Finding으로 통합, 점수화·IPC 노출.
 
-- [ ] **model.rs**: `Finding{ id, ts_ms, technique:Vec<String>, severity(Info/Low/Med/High/Critical), title, description, actor_node:Option<u64>, source(Sigma{rule_id}|Stateful{kind}|Deep), evidence:Vec<u64> }`. `Capture`에 `findings` + `add_finding`(deep_findings 패턴 그대로), `findings_version` 범프.
-- [ ] **탐지 실행**: ingest 스레드에서 `ingest(ev)`가 만든 이벤트 id를 받아 `Capture::detect(event_id, &rules)` → sigma_view 필드맵 → 카테고리 일치 룰만 `eval` → 매칭시 `add_finding(Sigma)`. 1단계 injected-thread 신호도 여기서 `add_finding(Stateful{"injected_thread"})`로 승격. (borrow: 필드맵·매칭 결과를 먼저 수집 후 `&mut self`로 add.) 룰은 `AppState`에 `Arc<Vec<CompiledRule>>`로 로드해 ingest 스레드에 공유.
-- [ ] **stateful.rs** (Sigma로 못 잡는 4개, 노드별 상태, `Capture`가 소유):
-  - **비커닝**: 같은 `ip:port` N회 + jitter 임계 이하 → **High**.
-  - **DNS DGA/터널**: 부모도메인당 고유 서브도메인 폭증 또는 라벨 Shannon 엔트로피 임계 → **Med/High**.
-  - **랜섬 mass-op**: 윈도 내 ≥M개 디렉터리에 일관된 새 확장자/동일 노트명 create·rename → **Critical**.
-  - **자가삭제**: 자기 image delete → **Med**.
-  - 각각 **단위 테스트**(합성 이벤트 시퀀스 주입).
-- [ ] **점수**: 노드별/캡처별 `suspicion = Σ severity 가중치`(Crit100/High40/Med10/Low2). `ProcessNode.suspicion`, `CaptureStatus.suspicion` 노출. `add_finding`에서 누적.
-- [ ] **IPC/emit**: `get_findings` 커맨드(`lib.rs generate_handler!` 등록), `CaptureDelta`/`CaptureStatus`에 `findings_version` 추가(프론트는 변할 때만 refetch). `EventFilter`에 `event_ids:Option<Vec<u64>>` 추가(6단계 "증거 보기"용).
-- [ ] **건드리는 파일**: `model.rs`, `store.rs`, `stateful.rs`(신규), `sigma_fields.rs`(detect 연계), `ipc.rs`, `lib.rs`, `emit.rs`.
-- [ ] **검증**: `cargo test --lib`(stateful 단위 테스트 + 기존 통과). `captures_cmd_subtree` 회귀 없음(사용자 elevated).
-- [ ] **커밋**: `feat(detect): Finding model, stateful heuristics, scoring, IPC`
+- [x] **model.rs**: `Severity(Info/Low/Med/High/Critical, Ord)`+`weight()`, `FindingSource(Sigma{rule_id}|Stateful{kind}|Deep)`, `Finding{ id, ts_ms, technique, severity, title, description, actor_node, source, evidence }`. `Capture.findings`+`add_finding`(deep_findings 패턴)+`findings_version`. `ProcessNode.suspicion`.
+- [x] **탐지 실행**: ingest 스레드에서 `ingest(c)`가 반환한 이벤트 id로 `Capture::detect_event(id, &RuleSet)` → sigma_view 필드맵 → **카테고리 인덱싱된** `RuleSet`만 `eval` → 매칭 결과를 먼저 수집 후 `add_finding(Sigma)`. 룰은 `AppState.ruleset: OnceLock<Arc<RuleSet>>`로 lazy 로드(`load_default_ruleset`, ~1392룰) 후 ingest 스레드 공유.
+- [x] **stateful.rs** (4개, 노드별 상태, `Capture` 소유, 주체별 1회 발화):
+  - **비커닝**: 같은 `ip:port` ≥5회 + 간격 CV ≤0.25 → **High**(loopback 제외).
+  - **DNS 터널**: 부모도메인당 고유 서브도메인 ≥25 → **High**. **DGA**: 라벨 엔트로피 ≥3.2·길이 ≥12 도메인 ≥5개 → **Med**.
+  - **랜섬 mass-op**: 5s 윈도 내 같은 새 확장자가 ≥8 디렉터리 / 동일 파일명 ≥5 디렉터리 → **Critical**(benign 확장자/파일명 제외).
+  - **자가삭제**: 노드 자기 image delete/rename → **Med**.
+  - 각각 **단위 테스트 6개**(합성 시퀀스 주입; 비커닝 비매칭 포함).
+- [x] **점수**: `suspicion = Σ severity 가중치`(Crit100/High40/Med10/Low2/Info0). `ProcessNode.suspicion`+`CaptureStatus.suspicion`. `add_finding`에서 노드·캡처 누적.
+- [x] **IPC/emit**: `get_findings` 커맨드(`lib.rs` 등록), `CaptureStatus`/`CaptureDelta`에 `findings_count`+`findings_version`+`suspicion`. `EventFilter.event_ids:Option<Vec<u64>>`(증거 점프). 프론트 구독은 6단계.
+- [x] **건드리는 파일**: `model.rs`, `store.rs`, `stateful.rs`(신규), `sigma.rs`(RuleSet/load_default_ruleset/severity/description), `sigma_fields.rs`(Hash), `ipc.rs`, `lib.rs`.
+- [x] **검증**: `cargo test --lib` **24 통과**(stateful 6 + 기존). `cargo check` 클린.
+- [ ] **deferred**: injected-thread 신호 → Finding 승격은 1단계 injection 텔레메트리(실측 대기)와 함께. `FindingSource::Deep` 승격도 후속.
+- [x] **커밋**: `feat(detect): Finding model, stateful heuristics, scoring, IPC`
 
 ---
 

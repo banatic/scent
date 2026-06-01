@@ -11,9 +11,12 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    basename, Category, CategoryCounts, Event, EventKind, FileOp, NetDir, Proto, ProcStatus,
-    ProcessNode, RegOp,
+    basename, Category, CategoryCounts, Event, EventKind, FileOp, Finding, FindingSource, NetDir,
+    Proto, ProcStatus, ProcessNode, RegOp, Severity,
 };
+use crate::sigma::RuleSet;
+use crate::sigma_fields::sigma_view;
+use crate::stateful::{self, Input, InputKind};
 use crate::tracker::Tracker;
 
 /// Fully-resolved, already-scoped event from the ETW layer.
@@ -80,6 +83,14 @@ pub struct Capture {
     drive_map: Vec<(String, String)>,
     /// Deep-mode caller attributions (populated when deep capture is on).
     deep_findings: Vec<DeepFinding>,
+    /// Triage findings (Sigma + stateful heuristics), in detection order.
+    findings: Vec<Finding>,
+    findings_version: u64,
+    next_finding_id: u64,
+    /// Capture-wide Σ severity weight.
+    total_suspicion: u64,
+    /// Stateful-heuristic memory (beaconing / DNS / ransom / self-delete).
+    stateful: stateful::State,
 }
 
 #[derive(Clone, Serialize)]
@@ -93,6 +104,9 @@ pub struct CaptureStatus {
     pub tree_version: u64,
     pub counts: CategoryCounts,
     pub deep_count: u64,
+    pub findings_count: u64,
+    pub findings_version: u64,
+    pub suspicion: u64,
     pub admin_error: Option<String>,
 }
 
@@ -114,6 +128,9 @@ pub struct CaptureDelta {
     pub tree_version: u64,
     pub counts: CategoryCounts,
     pub deep_count: u64,
+    pub findings_count: u64,
+    pub findings_version: u64,
+    pub suspicion: u64,
 }
 
 /// Query parameters from the frontend (all optional, ANDed).
@@ -127,6 +144,8 @@ pub struct EventFilter {
     pub hide_noise: Option<bool>,
     /// Collapse identical (actor, op, target) into one row with a `dup_count`.
     pub collapse: Option<bool>,
+    /// Restrict to specific event ids (a finding's evidence — "show evidence" jump).
+    pub event_ids: Option<Vec<u64>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -174,6 +193,11 @@ impl Capture {
             admin_error: None,
             drive_map: Vec::new(),
             deep_findings: Vec::new(),
+            findings: Vec::new(),
+            findings_version: 0,
+            next_finding_id: 0,
+            total_suspicion: 0,
+            stateful: stateful::State::default(),
         }
     }
 
@@ -242,6 +266,7 @@ impl Capture {
             exit_code: None,
             event_count: 0,
             counts: CategoryCounts::default(),
+            suspicion: 0,
         });
         self.tracker.add_live(pid, node_id);
         self.root_node_id = Some(node_id);
@@ -249,7 +274,7 @@ impl Capture {
         self.tree_version += 1;
     }
 
-    fn push_event(&mut self, pid: u32, node_id: Option<u64>, kind: EventKind) {
+    fn push_event(&mut self, pid: u32, node_id: Option<u64>, kind: EventKind) -> u64 {
         let category = kind.category();
         self.counts.bump(category);
         if let Some(nid) = node_id {
@@ -269,10 +294,12 @@ impl Capture {
             dup_count: None,
             kind,
         });
+        id
     }
 
-    /// Apply one resolved event from the ETW layer.
-    pub fn ingest(&mut self, c: Captured) {
+    /// Apply one resolved event from the ETW layer. Returns the id of the event it
+    /// pushed (so the ingest thread can run detection on it), or `None` if dropped.
+    pub fn ingest(&mut self, c: Captured) -> Option<u64> {
         match c {
             Captured::ProcCreate {
                 pid,
@@ -282,10 +309,10 @@ impl Capture {
                 cmdline,
             } => {
                 if self.tracker.is_own(pid) {
-                    return;
+                    return None;
                 }
                 let Some(parent_node) = self.tracker.live_node(ppid) else {
-                    return;
+                    return None;
                 };
                 let image = self.normalize_path(&image);
                 let ts_ms = self.elapsed_ms();
@@ -306,9 +333,10 @@ impl Capture {
                     exit_code: None,
                     event_count: 0,
                     counts: CategoryCounts::default(),
+                    suspicion: 0,
                 });
                 self.tracker.add_live(pid, node_id);
-                self.push_event(
+                let eid = self.push_event(
                     ppid,
                     Some(parent_node),
                     EventKind::ProcCreate {
@@ -318,10 +346,11 @@ impl Capture {
                     },
                 );
                 self.tree_version += 1;
+                Some(eid)
             }
             Captured::ProcExit { pid, exit_code } => {
                 let Some(node_id) = self.tracker.remove_live(pid) else {
-                    return;
+                    return None;
                 };
                 let ts_ms = self.elapsed_ms();
                 {
@@ -330,13 +359,14 @@ impl Capture {
                     n.exited_ms = Some(ts_ms);
                     n.exit_code = exit_code;
                 }
-                self.push_event(pid, Some(node_id), EventKind::ProcExit { exit_code });
+                let eid = self.push_event(pid, Some(node_id), EventKind::ProcExit { exit_code });
                 self.tree_version += 1;
+                Some(eid)
             }
             Captured::File { pid, op, path } => {
                 let path = self.normalize_path(&path);
                 let node = self.tracker.live_node(pid);
-                self.push_event(pid, node, EventKind::FileOp { op, path });
+                Some(self.push_event(pid, node, EventKind::FileOp { op, path }))
             }
             Captured::Reg {
                 pid,
@@ -346,7 +376,7 @@ impl Capture {
             } => {
                 let path = Self::normalize_reg(&path);
                 let node = self.tracker.live_node(pid);
-                self.push_event(pid, node, EventKind::RegOp { op, path, value });
+                Some(self.push_event(pid, node, EventKind::RegOp { op, path, value }))
             }
             Captured::Net {
                 pid,
@@ -357,7 +387,7 @@ impl Capture {
                 remote_port,
             } => {
                 let node = self.tracker.live_node(pid);
-                self.push_event(
+                Some(self.push_event(
                     pid,
                     node,
                     EventKind::NetConn {
@@ -367,7 +397,7 @@ impl Capture {
                         remote,
                         remote_port,
                     },
-                );
+                ))
             }
             Captured::Dns {
                 pid,
@@ -376,7 +406,7 @@ impl Capture {
                 results,
             } => {
                 let node = self.tracker.live_node(pid);
-                self.push_event(
+                Some(self.push_event(
                     pid,
                     node,
                     EventKind::Dns {
@@ -384,14 +414,146 @@ impl Capture {
                         qtype,
                         results,
                     },
-                );
+                ))
             }
             Captured::Image { pid, image, base } => {
                 let image = self.normalize_path(&image);
                 let node = self.tracker.live_node(pid);
-                self.push_event(pid, node, EventKind::ImageLoad { image, base });
+                Some(self.push_event(pid, node, EventKind::ImageLoad { image, base }))
             }
         }
+    }
+
+    /// Run the detection layers on the event with `event_id`: Sigma rules whose
+    /// category matches, then the stateful heuristics. Called by the ingest thread
+    /// right after `ingest`. Collects matches under an immutable borrow, then
+    /// records findings (which mutate node/capture suspicion).
+    pub fn detect_event(&mut self, event_id: u64, rules: &RuleSet) {
+        let Some(ev) = self.events.get(event_id as usize).cloned() else {
+            return;
+        };
+
+        // --- Layer 1: Sigma -------------------------------------------------
+        if !rules.is_empty() {
+            if let Some((cat, fields)) = sigma_view(&ev, self) {
+                let mut hits: Vec<(String, String, String, Severity, Vec<String>)> = Vec::new();
+                for rule in rules.for_category(cat) {
+                    if rule.eval(&fields) {
+                        hits.push((
+                            rule.id.clone(),
+                            rule.title.clone(),
+                            rule.description.clone(),
+                            rule.level.severity(),
+                            rule.tags.clone(),
+                        ));
+                    }
+                }
+                for (rule_id, title, description, severity, technique) in hits {
+                    self.add_finding(
+                        ev.ts_ms,
+                        technique,
+                        severity,
+                        title,
+                        description,
+                        ev.node_id,
+                        FindingSource::Sigma { rule_id },
+                        vec![ev.id],
+                    );
+                }
+            }
+        }
+
+        // --- Layer 2: stateful heuristics -----------------------------------
+        // Resolve a self-delete victim (a node whose image == this delete target).
+        let image_target = match &ev.kind {
+            EventKind::FileOp {
+                op: FileOp::Delete | FileOp::Rename,
+                path,
+            } => {
+                let pl = path.to_lowercase();
+                self.nodes
+                    .iter()
+                    .find(|n| n.image.to_lowercase() == pl)
+                    .map(|n| n.node_id)
+            }
+            _ => None,
+        };
+        let kind = match &ev.kind {
+            EventKind::NetConn {
+                remote,
+                remote_port,
+                direction,
+                ..
+            } => InputKind::Net {
+                remote,
+                port: *remote_port,
+                outbound: matches!(direction, NetDir::Outbound),
+            },
+            EventKind::Dns { query, .. } => InputKind::Dns { query },
+            EventKind::FileOp { op, path } => InputKind::File { op: *op, path },
+            _ => InputKind::Other,
+        };
+        let input = Input {
+            event_id: ev.id,
+            ts_ms: ev.ts_ms,
+            node_id: ev.node_id,
+            kind,
+            image_target,
+        };
+        let pendings = self.stateful.feed(&input);
+        for p in pendings {
+            self.add_finding(
+                ev.ts_ms,
+                p.technique,
+                p.severity,
+                p.title,
+                p.description,
+                ev.node_id,
+                FindingSource::Stateful { kind: p.kind.to_string() },
+                p.evidence,
+            );
+        }
+    }
+
+    /// Record a finding, bumping the actor node's and the capture's suspicion.
+    #[allow(clippy::too_many_arguments)]
+    fn add_finding(
+        &mut self,
+        ts_ms: u64,
+        technique: Vec<String>,
+        severity: Severity,
+        title: String,
+        description: String,
+        actor_node: Option<u64>,
+        source: FindingSource,
+        evidence: Vec<u64>,
+    ) {
+        let id = self.next_finding_id;
+        self.next_finding_id += 1;
+        let w = severity.weight();
+        self.total_suspicion += w;
+        if let Some(nid) = actor_node {
+            if let Some(n) = self.nodes.get_mut(nid as usize) {
+                n.suspicion += w;
+            }
+        }
+        self.findings.push(Finding {
+            id,
+            ts_ms,
+            technique,
+            severity,
+            title,
+            description,
+            actor_node,
+            source,
+            evidence,
+        });
+        self.findings_version += 1;
+    }
+
+    /// All findings (for the panel / export).
+    pub fn findings(&self) -> &[Finding] {
+        &self.findings
     }
 
     pub fn set_admin_error(&mut self, msg: String) {
@@ -413,6 +575,9 @@ impl Capture {
             tree_version: self.tree_version,
             counts: self.counts,
             deep_count: self.deep_findings.len() as u64,
+            findings_count: self.findings.len() as u64,
+            findings_version: self.findings_version,
+            suspicion: self.total_suspicion,
             admin_error: self.admin_error.clone(),
         }
     }
@@ -427,6 +592,9 @@ impl Capture {
             tree_version: self.tree_version,
             counts: self.counts,
             deep_count: self.deep_findings.len() as u64,
+            findings_count: self.findings.len() as u64,
+            findings_version: self.findings_version,
+            suspicion: self.total_suspicion,
         }
     }
 
@@ -509,6 +677,11 @@ impl Capture {
         let collapse = filter.collapse.unwrap_or(false);
 
         let matches = |e: &Event| -> bool {
+            if let Some(ids) = &filter.event_ids {
+                if !ids.contains(&e.id) {
+                    return false;
+                }
+            }
             if let Some(cat) = filter.category {
                 if e.category != cat {
                     return false;

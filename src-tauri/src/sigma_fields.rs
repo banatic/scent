@@ -17,7 +17,7 @@ use crate::model::{basename, Event, EventKind, FileOp, NetDir, ProcessNode, RegO
 use crate::store::Capture;
 
 /// Sigma `logsource.category` values scent can produce telemetry for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SigmaCategory {
     ProcessCreation,
     RegistrySet,

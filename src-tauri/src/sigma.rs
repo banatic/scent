@@ -13,14 +13,15 @@
 //! selection names, `and`/`or`/`not`, parentheses, and `1 of` / `all of` over
 //! `them` or a `name*` prefix.
 
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use regex::Regex;
 use serde::Serialize;
 
+use crate::model::Severity;
 use crate::sigma_fields::SigmaCategory;
 
 /// Sigma severity level.
@@ -44,6 +45,17 @@ impl Level {
             _ => Level::Informational,
         }
     }
+
+    /// Map a Sigma level to a triage severity.
+    pub fn severity(self) -> Severity {
+        match self {
+            Level::Critical => Severity::Critical,
+            Level::High => Severity::High,
+            Level::Medium => Severity::Med,
+            Level::Low => Severity::Low,
+            Level::Informational => Severity::Info,
+        }
+    }
 }
 
 /// A rule compiled to an evaluable form. Shared read-only via `Arc` at runtime,
@@ -51,6 +63,7 @@ impl Level {
 pub struct CompiledRule {
     pub id: String,
     pub title: String,
+    pub description: String,
     pub level: Level,
     pub status: String,
     /// ATT&CK technique IDs extracted from tags (e.g. "T1059.001").
@@ -362,6 +375,7 @@ fn compile(text: &str) -> Result<CompiledRule, Reject> {
     Ok(CompiledRule {
         id: get_str("id").unwrap_or_default(),
         title: get_str("title").unwrap_or_else(|| "(untitled)".into()),
+        description: get_str("description").unwrap_or_default(),
         level: get_str("level").map(|l| Level::parse(&l)).unwrap_or(Level::Informational),
         status: get_str("status").unwrap_or_default(),
         tags,
@@ -369,6 +383,65 @@ fn compile(text: &str) -> Result<CompiledRule, Reject> {
         selections,
         cond,
     })
+}
+
+/// Rules indexed by Sigma category, so per-event evaluation only touches the
+/// rules whose logsource matches the event.
+pub struct RuleSet {
+    by_cat: HashMap<SigmaCategory, Vec<CompiledRule>>,
+    total: usize,
+}
+
+impl RuleSet {
+    pub fn new(rules: Vec<CompiledRule>) -> RuleSet {
+        let total = rules.len();
+        let mut by_cat: HashMap<SigmaCategory, Vec<CompiledRule>> = HashMap::new();
+        for r in rules {
+            by_cat.entry(r.category).or_default().push(r);
+        }
+        RuleSet { by_cat, total }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.total == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.total
+    }
+
+    /// Rules whose logsource category matches `cat` (empty slice if none).
+    pub fn for_category(&self, cat: SigmaCategory) -> &[CompiledRule] {
+        self.by_cat.get(&cat).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+}
+
+/// Resolve the bundled ruleset directory and load it. Tries `<exe-dir>/rules`
+/// (shipped) then the dev tree, returning an empty set if neither exists — scent
+/// runs fine with no Sigma rules (heuristics + raw telemetry still work).
+pub fn load_default_ruleset() -> RuleSet {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("rules").join("stable_medium_plus"));
+        }
+    }
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rules/stable_medium_plus"));
+
+    for dir in candidates {
+        if dir.is_dir() {
+            let (rules, report) = load_rules(&dir);
+            eprintln!(
+                "[sigma] loaded {} rules from {} ({:?})",
+                rules.len(),
+                dir.display(),
+                report
+            );
+            return RuleSet::new(rules);
+        }
+    }
+    eprintln!("[sigma] no ruleset directory found; Sigma detection disabled");
+    RuleSet::new(Vec::new())
 }
 
 fn extract_techniques(tags: Option<&serde_yaml::Value>) -> Vec<String> {
