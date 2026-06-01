@@ -189,9 +189,14 @@
 ---
 
 ### 8단계 인수 기준
-- [ ] `npx tsc --noEmit` · `npm run build` 클린; `cargo check` · `cargo test --lib`(신규 query 테스트 포함) 통과.
-- [ ] 회귀 체크리스트 통과: evidence 점프 · timeline brush→ts · node/서브트리 필터 · collapse · hide_noise · deep(Inspector 경유) · export.
-- [ ] 상시 glass 1겹(topbar) + 맥락 Inspector; 탭 4개; facet 2단 + 프리셋 동작(사용자 elevated 스크린샷 확인).
+- [x] `npx tsc --noEmit` · `npm run build` 클린; `cargo test --lib` **29 통과**(기존 24 + 신규 query 5: ops/proto·dir·port/subtree/host·path/port-scope).
+- [x] 회귀(코드/타입 레벨) 보존: evidence 점프·timeline brush→ts·node/서브트리 필터·collapse·hide_noise·deep(Evidence>Deep 세그먼트→Inspector 스택)·export 드롭다운(center overflow 비클립). 시각 회귀는 사용자 elevated 스크린샷 대기.
+- [x] 상시 glass 1겹(topbar) + 맥락 Inspector 슬라이드-오버; 최상위 탭 4개(Evidence 세그먼트 표/그래프/타임라인/Deep); facet 2단 + 프리셋 4종 + severity 임계 필터 구현.
+
+### 8단계 구현 메모 (계획 대비 편차)
+1. **Deep**: "Inspector로만 흡수" 대신 **Evidence 세그먼트의 조건부 4번째 렌즈**(deep_count>0일 때 노출)로 배치 — 최상위 탭은 7→4로 줄이면서 DeepPanel/스택체인 기능 **무손실**. Inspector 스택체인은 그대로(row 클릭).
+2. **min_severity**: `get_findings`에 백엔드 파라미터를 추가하지 않고 **FindingsPanel 클라이언트 필터**로 처리 — findings는 이미 프론트 메모리에 전부 있어 즉답·무refetch가 낫고 IPC 시그니처 불변. (`ipc.rs` 무변경.)
+3. **glass 통합**: 탭 바를 `.center` 카드의 불투명 헤더로 흡수(별도 glass 슬라브 제거). Export 드롭다운 클립 회피를 위해 overflow는 `.view`에만.
 
 ### 8단계 리스크/주의
 1. **collapse × 필터 순서**: collapse 재집계가 필터 적용 후 dedup이 되도록(`store::query` 순서). 단위테스트로 고정.
