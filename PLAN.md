@@ -77,14 +77,14 @@
 
 ---
 
-## 4단계 · 룰셋 큐레이션 — `scripts/curate_sigma.py` (영구 유지보수 경로)
+## 4단계 · 룰셋 큐레이션 — `scripts/curate_sigma.py` (영구 유지보수 경로) ✅
 **목표**: SigmaHQ에서 **scent 센서로 실제 평가 가능한** 룰만 골라 동기화. 인수 기준 manifest 산출.
 
-- [ ] `vendor/sigma` = SigmaHQ/sigma **git submodule** 추가. `README.md`에 갱신법(`git submodule update --remote`) 명시.
-- [ ] **필터**: category ∈ {8개}; product `windows`/미지정; detection이 쓰는 **모든 필드 ∈ provided 집합**(스크립트 하드코딩, 어댑터와 동기화); status ∈ {stable,test}; level ≥ medium; **미지원 모디파이어/correlation 제외**.
-- [ ] **출력**: `src-tauri/rules/stable_medium_plus/` 와 `.../optin/`(experimental·low) 분류 복사 + `manifest.json`(룰 수, ATT&CK 커버리지). **멱등**. 콘솔에 로드/스킵 **사유별 카운트** 요약.
-- [ ] **검증**: 1회 실행 → "실제로 몇 개 Sigma 룰이 scent 센서로 평가 가능한지" manifest 보고(인수 기준).
-- [ ] **커밋**: `feat(rules): SigmaHQ curation script + curated ruleset + manifest`
+- [x] `vendor/sigma` = SigmaHQ/sigma **git submodule**(shallow) 추가. `README.md`에 갱신법(`git submodule update --remote` → `python scripts/curate_sigma.py`) + DRL 라이선스 명시.
+- [x] **필터**: category ∈ {8개+별칭}; product `windows`/미지정; detection 필드 ⊆ provided 집합(스크립트 하드코딩, 어댑터 동기화); status ∈ {stable,test}; level ≥ medium; **미지원 모디파이어/correlation/aggregation/timeframe 제외**.
+- [x] **출력**: `src-tauri/rules/stable_medium_plus/`(1392) 와 `.../optin/`(experimental·low, 205) + `manifest.json`(룰 수, ATT&CK 255, 카테고리/스킵 사유 분포). **멱등**(출력 디렉터리 재빌드). 콘솔 사유별 카운트 요약.
+- [x] **검증**: 1회 실행 → **3589 스캔 → 1597 evaluable**(manifest). 교차검증 Rust 테스트 `curated_ruleset_loads_cleanly`: 엔진이 **1588/1597 로드**(9개는 Rust regex가 거부하는 lookaround, 런타임에서 안전 스킵), ≥95% 게이트 통과.
+- [x] **커밋**: `feat(rules): SigmaHQ curation script + curated ruleset + manifest`
 
 ---
 

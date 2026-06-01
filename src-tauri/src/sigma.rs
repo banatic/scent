@@ -908,6 +908,24 @@ detection:
     }
 
     #[test]
+    fn curated_ruleset_loads_cleanly() {
+        // Cross-check the Python curator against the Rust engine: nearly every
+        // curated rule should compile (the curator mirrors this engine's rules).
+        let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("rules");
+        if !base.exists() {
+            return; // ruleset not curated in this checkout
+        }
+        let (rules, report) = load_rules(&base);
+        println!("curated load report: {report:?}, compiled={}", rules.len());
+        assert!(report.loaded > 0, "expected curated rules to load");
+        let total = report.loaded + report.skipped_unsupported + report.skipped_missing_fields;
+        assert!(
+            report.loaded * 100 >= total * 95,
+            "≥95% of curated rules should load in the engine, got {report:?}"
+        );
+    }
+
+    #[test]
     fn load_fixture_dir_reports_skips() {
         // Real-rule-shaped fixtures: 3 loadable + 1 skipped (uses Hashes).
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sigma");

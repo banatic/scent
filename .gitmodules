@@ -1,0 +1,3 @@
+[submodule "vendor/sigma"]
+	path = vendor/sigma
+	url = https://github.com/SigmaHQ/sigma.git
