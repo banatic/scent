@@ -12,6 +12,7 @@ mod sigma_fields;
 mod stateful;
 mod store;
 mod tracker;
+mod triage;
 
 #[cfg(test)]
 mod capture_smoke;
@@ -52,6 +53,8 @@ pub fn run() {
             ipc::get_event_detail,
             ipc::get_deep_findings,
             ipc::get_findings,
+            ipc::get_triage_bundle,
+            ipc::run_triage,
             ipc::export_report
         ])
         .run(tauri::generate_context!())

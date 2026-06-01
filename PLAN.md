@@ -123,15 +123,27 @@
 
 ---
 
-## 7단계 · LLM 트리아지 output (부가)
+## 7단계 · LLM 트리아지 output (부가) ✅
 **목표**: 텔레메트리 기반 LLM 트리아지 출력 체계. **Findings 불변, 환각이 덮어쓰지 못하게.**
 
-- [ ] **컨텍스트 번들러**(신설 `triage.rs`): findings + IOC + 트리/카운트 요약을 구조화 입력으로 직렬화.
-- [ ] **가드레일 프롬프트**: "주어진 텔레메트리만으로 판단, 추측 시 명시, IOC 그대로 인용". 출력 스키마(요약/우선순위/근거 IOC 인용/불확실성 플래그) 고정.
-- [ ] **VerdictPanel**(별도 패널): LLM 출력은 여기에만. Findings/raw는 불변. **LLM 키 없으면 비활성(나머지 전부 동작).**
-- [ ] **건드리는 파일**: `triage.rs`(신규), `ipc.rs`, `lib.rs`, `components/VerdictPanel.tsx`(신규), `lib/types.ts`·`ipc.ts`.
-- [ ] **검증**: 키 없이 빌드/실행 정상. `cargo check` + `npm run build` + `npx tsc --noEmit`.
-- [ ] **커밋**: `feat(triage): guarded LLM verdict panel (optional)`
+- [x] **컨텍스트 번들러**(신설 `triage.rs`): findings(severity 정렬) + IOC(backend 재수집, verbatim) + 트리/카운트 요약을 결정적 컨텍스트로 직렬화. `TriageBundle{system_prompt, context, ready_prompt}`.
+- [x] **가드레일 프롬프트**: "주어진 텔레메트리만으로 판단, 추측 시 'Speculation:' 명시, IOC verbatim 인용, Findings가 authoritative". 출력 스키마(assessment/confidence/summary/key_observations/cited_iocs/recommended_actions/uncertainties) JSON 고정.
+- [x] **VerdictPanel**(별도 탭): LLM 출력 전용. Findings/raw 불변. "Copy for LLM"(키 없이 항상)/"Run analysis"(`ANTHROPIC_API_KEY` 있을 때 ureq로 Anthropic 호출, 없으면 명확한 에러). JSON 파싱 실패시 raw 보존.
+- [x] **건드리는 파일**: `triage.rs`(신규), `Cargo.toml`(ureq), `ipc.rs`, `lib.rs`, `VerdictPanel.tsx`(신규), `lib/types.ts`·`ipc.ts`, `app.css`.
+- [x] **검증**: 키 없이 빌드/실행 정상(`run_triage`는 키 없으면 Err 반환, UI는 수동 번들 안내). `cargo check`·`cargo test --lib`(24)·`npm run build`·`npx tsc --noEmit` 클린.
+- [x] **커밋**: `feat(triage): guarded LLM verdict panel (optional)`
+
+---
+
+## 최종 인수 기준 결과
+- [x] `cargo check` + 기존 smoke 테스트(compile, 5 elevated ignored) + **신규 단위 테스트 24개** 통과.
+- [x] `npm run build` + `npx tsc --noEmit` 클린.
+- [x] **LLM 키 없이** 캡처/탐지/UI 전부 동작(7단계 부가, run_triage만 키 필요).
+- [x] 4단계 큐레이션 1회 실행 → **3589 스캔 → 1597 evaluable**(manifest), 엔진 교차검증 **1588 로드**.
+
+## 사용자 후속(elevated 필요 — 내가 못 돌림)
+1. `cargo test --lib -- --ignored --nocapture explore_providers`(관리자) → 출력 공유 → 1단계 deferred(ThreadStart/READ/integrity) 실측 필드명으로 마무리.
+2. `cargo test --lib -- --ignored --nocapture captures_cmd_subtree`(관리자) → cmdline 채움 + 파이프라인 회귀 확인.
 
 ---
 

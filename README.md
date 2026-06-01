@@ -54,3 +54,17 @@ It writes:
 
 The curated rules retain SigmaHQ's [Detection Rule License](https://github.com/SigmaHQ/Detection-Rule-License);
 `manifest.json` records the source repo and commit they were generated from.
+
+## Optional LLM triage
+
+The **Verdict** tab can turn the findings + IOCs + process tree into a narrative
+assessment. It's strictly optional and advisory — the verdict lives only in that
+panel and never mutates the deterministic Findings. Two ways to use it:
+
+- **Copy for LLM** — copies a guarded, citation-ready prompt to paste into any model.
+- **Run analysis** — calls the Anthropic API directly. Set the backend env vars:
+  - `ANTHROPIC_API_KEY` (required for this path),
+  - `ANTHROPIC_MODEL` (optional; defaults to `claude-sonnet-4-6`).
+
+Without a key, everything else — capture, detection, and the whole UI — works
+unchanged; only **Run analysis** is disabled.

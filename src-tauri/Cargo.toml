@@ -25,6 +25,10 @@ serde_yaml = "0.9"
 regex = "1"
 base64 = "0.22"
 
+# Optional LLM triage: a tiny blocking HTTP client (pure-Rust rustls TLS). The
+# whole feature is opt-in (needs ANTHROPIC_API_KEY); scent runs fully without it.
+ureq = "2"
+
 # ETW capture
 ferrisetw = "1.2"
 

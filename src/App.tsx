@@ -6,6 +6,7 @@ import {
   GitBranch,
   Network,
   ShieldAlert,
+  Sparkles,
   Table2,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ import { IocPanel } from "./components/IocPanel";
 import { ProcessTree } from "./components/ProcessTree";
 import { TimelineView } from "./components/TimelineView";
 import { TopBar } from "./components/TopBar";
+import { VerdictPanel } from "./components/VerdictPanel";
 import { branchSeverity, directSeverityByNode } from "./lib/findings";
 import {
   getDeepFindings,
@@ -40,7 +42,7 @@ import type {
   ScentEvent,
 } from "./lib/types";
 
-type Tab = "findings" | "events" | "graph" | "timeline" | "ioc" | "deep";
+type Tab = "findings" | "events" | "graph" | "timeline" | "ioc" | "deep" | "verdict";
 
 const EMPTY_STATUS: CaptureStatus = {
   running: false,
@@ -302,6 +304,9 @@ export default function App() {
               Deep
               {status.deep_count > 0 && <span className="tab__badge tnum">{status.deep_count}</span>}
             </TabButton>
+            <TabButton id="verdict" tab={tab} setTab={setTab} icon={<Sparkles size={14} />}>
+              Verdict
+            </TabButton>
             <div className="tabs__spacer" />
             <ExportMenu disabled={status.total_events === 0} />
           </div>
@@ -352,6 +357,7 @@ export default function App() {
               />
             )}
             {tab === "ioc" && <IocPanel liveTotal={status.total_events} />}
+            {tab === "verdict" && <VerdictPanel hasCapture={status.total_events > 0} />}
             {tab === "deep" && (
               <DeepPanel
                 findings={deepFindings}

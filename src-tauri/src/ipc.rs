@@ -29,6 +29,7 @@ use crate::sigma::{self, RuleSet};
 use crate::store::{
     Capture, Captured, CaptureStatus, DeepFinding, EventFilter, EventPage, ProcessTree,
 };
+use crate::triage;
 
 /// Handles needed to tear a running capture down.
 pub struct CaptureControl {
@@ -335,6 +336,20 @@ pub fn get_deep_findings(state: State<AppState>) -> Vec<DeepFinding> {
 #[tauri::command]
 pub fn get_findings(state: State<AppState>) -> Vec<Finding> {
     state.capture.read().findings().to_vec()
+}
+
+/// Build the deterministic LLM-triage bundle (always available; no key needed).
+#[tauri::command]
+pub fn get_triage_bundle(state: State<AppState>) -> triage::TriageBundle {
+    triage::build_bundle(&state.capture.read())
+}
+
+/// Run the optional Anthropic triage. Builds the bundle under the read lock, then
+/// releases it before the (blocking) network call. Errors clearly if no API key.
+#[tauri::command]
+pub fn run_triage(state: State<AppState>) -> Result<triage::Verdict, String> {
+    let bundle = triage::build_bundle(&state.capture.read());
+    triage::run(&bundle)
 }
 
 /// Write a report. For `jsonl`/`html`/`markdown`, `path` is the target file; for

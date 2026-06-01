@@ -175,3 +175,23 @@ export interface EventPage {
 export interface StartInfo {
   root_pid: number;
 }
+
+// ---- LLM triage (optional layer 3) — mirrors triage.rs ----------------------
+export interface TriageBundle {
+  system_prompt: string;
+  context: string;
+  ready_prompt: string;
+}
+
+export interface Verdict {
+  assessment: string; // benign | suspicious | malicious | unknown
+  confidence: string; // low | medium | high
+  summary: string;
+  key_observations: string[];
+  cited_iocs: string[];
+  recommended_actions: string[];
+  uncertainties: string[];
+  /** Raw model text when JSON parsing failed (nothing dropped). */
+  raw?: string | null;
+  model: string;
+}

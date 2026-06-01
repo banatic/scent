@@ -17,6 +17,8 @@ import type {
   ProcessTree,
   ScentEvent,
   StartInfo,
+  TriageBundle,
+  Verdict,
 } from "./types";
 
 export const DELTA_EVENT = "capture://delta";
@@ -35,6 +37,15 @@ export function getDeepFindings(): Promise<DeepFinding[]> {
 
 export function getFindings(): Promise<Finding[]> {
   return invoke<Finding[]>("get_findings");
+}
+
+export function getTriageBundle(): Promise<TriageBundle> {
+  return invoke<TriageBundle>("get_triage_bundle");
+}
+
+/** Optional: run the Anthropic triage. Rejects with a message if no API key. */
+export function runTriage(): Promise<Verdict> {
+  return invoke<Verdict>("run_triage");
 }
 
 export function stopCapture(): Promise<void> {
