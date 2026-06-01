@@ -29,15 +29,6 @@ interface TopBarProps {
   onStop: () => void;
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat">
-      <span className="stat__value tnum">{value}</span>
-      <span className="stat__label">{label}</span>
-    </div>
-  );
-}
-
 export function TopBar({
   status,
   targetPath,
@@ -57,7 +48,6 @@ export function TopBar({
     <GlassPanel className="topbar" transition={spring.panel}>
       <div className="topbar__brand">
         <span className="topbar__mark">scent</span>
-        <span className="topbar__tag">behavior analyzer</span>
       </div>
 
       <button
@@ -88,7 +78,10 @@ export function TopBar({
       />
 
       <div className="topbar__counters">
-        <div className={`rec${running ? " rec--on" : ""}`}>
+        <div
+          className={`capsule${running ? " capsule--on" : ""}`}
+          title={`${status.process_count.toLocaleString()} processes · ${status.live_count.toLocaleString()} live`}
+        >
           <motion.span
             className="rec__dot"
             animate={running ? { opacity: [1, 0.35, 1] } : { opacity: 0.4 }}
@@ -99,10 +92,12 @@ export function TopBar({
             }
           />
           <span className="rec__time tnum">{formatElapsed(status.elapsed_ms)}</span>
+          <span className="capsule__sep" />
+          <span className="capsule__events tnum">
+            {status.total_events.toLocaleString()}
+            <span className="capsule__unit">events</span>
+          </span>
         </div>
-        <Stat label="events" value={status.total_events.toLocaleString()} />
-        <Stat label="procs" value={status.process_count.toLocaleString()} />
-        <Stat label="live" value={status.live_count.toLocaleString()} />
       </div>
 
       <button

@@ -40,12 +40,6 @@
   font-weight: var(--fw-semibold);
   letter-spacing: -0.02em;
 }
-.topbar__tag {
-  font-size: var(--fs-2xs);
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-}
 
 /* Controls inside the bar: subtle inset surfaces (concentric: 14 - 8 = 6). */
 .field {
@@ -118,16 +112,44 @@
 .topbar__counters {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
   margin-left: auto;
-  padding: 0 var(--sp-2);
 }
 
-.rec {
-  display: flex;
+/* Compact status capsule: recording dot + elapsed + total events. procs/live
+   live in the title tooltip so the bar stays slim. */
+.capsule {
+  display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-pill);
+  border: 0.5px solid var(--hairline);
+  background: var(--surface-1);
 }
+.capsule--on {
+  border-color: var(--hairline-strong);
+}
+.capsule__sep {
+  width: 0.5px;
+  height: 14px;
+  background: var(--hairline-strong);
+}
+.capsule__events {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  color: var(--ink-1);
+}
+.capsule__unit {
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .rec__dot {
   width: 8px;
   height: 8px;
@@ -135,32 +157,14 @@
   background: var(--status-exited);
   display: inline-block;
 }
-.rec--on .rec__dot {
+.capsule--on .rec__dot {
   background: var(--status-alert);
 }
 .rec__time {
   font-size: var(--fs-md);
   font-weight: var(--fw-medium);
   color: var(--ink-1);
-  min-width: 64px;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.15;
-}
-.stat__value {
-  font-size: var(--fs-md);
-  font-weight: var(--fw-medium);
-  color: var(--ink-1);
-}
-.stat__label {
-  font-size: var(--fs-2xs);
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  min-width: 58px;
 }
 
 /* Primary control — monochrome (inverted), not a saturated chrome color. */
@@ -370,39 +374,41 @@
   display: flex;
   min-height: 0;
 }
+/* The center is one opaque card: a tab-bar header + the view body. It owns the
+   background/radius/shadow; the tabs and view sit transparently on top. No
+   overflow:hidden here, so the Export dropdown can escape downward over the view
+   (the view itself clips its own content + the inspector slide-over). */
 .center {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  background: var(--surface-1);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-panel);
 }
 .view {
   flex: 1 1 auto;
   min-height: 0;
   position: relative;
   display: flex;
-  background: var(--surface-1);
-  border-radius: var(--r-3);
-  box-shadow: var(--shadow-panel);
+  border-radius: 0 0 var(--r-3) var(--r-3);
   overflow: hidden;
 }
 
-/* ---- Tabs (chrome) --------------------------------------------------------- */
+/* ---- Tab bar (the card header — opaque, NOT glass) ------------------------- */
+/* Glass is reserved for the one floating layer (top bar) + the contextual
+   inspector. The tab bar reads as this card's header, so it stays flat. */
 .tabs {
   flex: 0 0 auto;
   position: relative;
-  z-index: 30; /* lift the whole bar's stacking context above .view so the
-                  export dropdown isn't covered by the graph/table below */
+  z-index: 30; /* lift the stacking context so the Export dropdown sits above
+                  the view content below */
   display: flex;
   align-items: center;
   gap: var(--sp-1);
-  padding: var(--sp-1);
-  background: var(--glass-fill);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  border-radius: var(--r-2);
-  box-shadow: var(--shadow-glass);
+  padding: var(--sp-2);
+  border-bottom: 0.5px solid var(--hairline);
 }
 .tabs__spacer {
   flex: 1 1 auto;
@@ -421,12 +427,12 @@
   cursor: pointer;
 }
 .tab:hover {
+  background: var(--surface-2);
   color: var(--ink-1);
 }
 .tab--on {
-  background: var(--surface-1);
+  background: var(--surface-3);
   color: var(--ink-1);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* Divider between the primary tabs and the Evidence lens switch. */

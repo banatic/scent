@@ -96,7 +96,12 @@
   --hairline: rgba(20, 23, 28, 0.1);
   --hairline-strong: rgba(20, 23, 28, 0.16);
   --row-hover: rgba(20, 23, 28, 0.045);
-  --row-selected: rgba(110, 168, 254, 0.16);
+  /* Single selection/active-filter accent (same hue as --cat-process; no new
+     color). Solid for borders/labels, soft for fills. Drives row selection,
+     active filter pills, and finding-card selection. */
+  --accent: #3b7df0;
+  --accent-soft: rgba(110, 168, 254, 0.16);
+  --row-selected: var(--accent-soft);
 
   /* CHROME glass */
   --glass-fill: rgba(255, 255, 255, 0.62);
@@ -132,7 +137,9 @@
   --hairline: rgba(255, 255, 255, 0.09);
   --hairline-strong: rgba(255, 255, 255, 0.16);
   --row-hover: rgba(255, 255, 255, 0.05);
-  --row-selected: rgba(110, 168, 254, 0.2);
+  --accent: #6ea8fe;
+  --accent-soft: rgba(110, 168, 254, 0.2);
+  --row-selected: var(--accent-soft);
 
   --glass-fill: rgba(32, 36, 43, 0.58);
   --glass-fill-strong: rgba(36, 41, 49, 0.8);
@@ -167,7 +174,9 @@
     --hairline: rgba(255, 255, 255, 0.09);
     --hairline-strong: rgba(255, 255, 255, 0.16);
     --row-hover: rgba(255, 255, 255, 0.05);
-    --row-selected: rgba(110, 168, 254, 0.2);
+    --accent: #6ea8fe;
+    --accent-soft: rgba(110, 168, 254, 0.2);
+    --row-selected: var(--accent-soft);
 
     --glass-fill: rgba(32, 36, 43, 0.58);
     --glass-fill-strong: rgba(36, 41, 49, 0.8);
