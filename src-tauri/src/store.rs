@@ -149,6 +149,19 @@ pub struct EventFilter {
     /// Capture-relative time window (ms), inclusive — the timeline brush selection.
     pub ts_from: Option<u64>,
     pub ts_to: Option<u64>,
+
+    // ---- Faceted filters (Phase 8.4) ----
+    /// Per-category operation facet — file/registry op tokens (`EventKind::op_token`).
+    /// Events with no op concept are excluded when this is set.
+    pub ops: Option<Vec<String>>,
+    /// Network facets (apply only to net events; non-net events excluded when set).
+    pub proto: Option<Proto>,
+    pub direction: Option<NetDir>,
+    pub port_min: Option<u16>,
+    pub port_max: Option<u16>,
+    /// Scope to these process nodes; with `include_subtree`, their descendants too.
+    pub node_ids: Option<Vec<u64>>,
+    pub include_subtree: Option<bool>,
 }
 
 #[derive(Clone, Serialize)]
@@ -668,16 +681,48 @@ impl Capture {
         &self.deep_findings
     }
 
+    /// Node ids reachable from `roots` (inclusive) via parent→child edges — used
+    /// to scope a query to a process subtree.
+    fn descendants_of(&self, roots: &[u64]) -> HashSet<u64> {
+        let mut children: HashMap<u64, Vec<u64>> = HashMap::new();
+        for n in &self.nodes {
+            if let Some(p) = n.parent_node_id {
+                children.entry(p).or_default().push(n.node_id);
+            }
+        }
+        let mut out: HashSet<u64> = HashSet::new();
+        let mut stack: Vec<u64> = roots.to_vec();
+        while let Some(id) = stack.pop() {
+            if out.insert(id) {
+                if let Some(kids) = children.get(&id) {
+                    stack.extend(kids.iter().copied());
+                }
+            }
+        }
+        out
+    }
+
     /// Page/filter events. Scans in arrival order; matching is ANDed.
     pub fn query(&self, filter: &EventFilter, offset: u64, limit: u64) -> EventPage {
+        // Free text may be scoped to a field via a `host:` / `path:` / `port:` prefix.
         let text = filter
             .text
             .as_ref()
-            .map(|t| t.trim().to_lowercase())
-            .filter(|t| !t.is_empty());
+            .map(|t| t.trim())
+            .filter(|t| !t.is_empty())
+            .map(parse_text_filter);
 
         let hide_noise = filter.hide_noise.unwrap_or(false);
         let collapse = filter.collapse.unwrap_or(false);
+
+        // Resolve the node scope once (subtree expansion is O(nodes)).
+        let scope: Option<HashSet<u64>> = filter.node_ids.as_ref().map(|ids| {
+            if filter.include_subtree.unwrap_or(false) {
+                self.descendants_of(ids)
+            } else {
+                ids.iter().copied().collect()
+            }
+        });
 
         let matches = |e: &Event| -> bool {
             if let Some(ids) = &filter.event_ids {
@@ -710,9 +755,53 @@ impl Capture {
                     return false;
                 }
             }
-            if let Some(t) = &text {
-                if !e.kind.haystack().contains(t.as_str()) {
-                    return false;
+            if let Some(scope) = &scope {
+                match e.node_id {
+                    Some(nid) if scope.contains(&nid) => {}
+                    _ => return false,
+                }
+            }
+            // Per-category operation facet (file/registry op kinds).
+            if let Some(ops) = &filter.ops {
+                match e.kind.op_token() {
+                    Some(tok) if ops.iter().any(|o| o == tok) => {}
+                    _ => return false,
+                }
+            }
+            // Network facets — only net events can satisfy them.
+            if let Some(proto) = filter.proto {
+                match &e.kind {
+                    EventKind::NetConn { proto: p, .. } if *p == proto => {}
+                    _ => return false,
+                }
+            }
+            if let Some(dir) = filter.direction {
+                match &e.kind {
+                    EventKind::NetConn { direction, .. } if *direction == dir => {}
+                    _ => return false,
+                }
+            }
+            if filter.port_min.is_some() || filter.port_max.is_some() {
+                match &e.kind {
+                    EventKind::NetConn { remote_port, .. } => {
+                        if let Some(lo) = filter.port_min {
+                            if *remote_port < lo {
+                                return false;
+                            }
+                        }
+                        if let Some(hi) = filter.port_max {
+                            if *remote_port > hi {
+                                return false;
+                            }
+                        }
+                    }
+                    _ => return false,
+                }
+            }
+            if let Some((field, needle)) = &text {
+                match field_haystack(&e.kind, *field) {
+                    Some(h) if h.contains(needle.as_str()) => {}
+                    _ => return false,
                 }
             }
             if hide_noise && e.is_noise() {
@@ -762,5 +851,211 @@ impl Capture {
             offset,
             events,
         }
+    }
+}
+
+/// Which field a free-text query targets. A `host:` / `path:` / `port:` prefix
+/// scopes the match; bare text searches the whole event haystack.
+#[derive(Clone, Copy)]
+enum TextField {
+    Any,
+    Host,
+    Path,
+    Port,
+}
+
+fn parse_text_filter(t: &str) -> (TextField, String) {
+    let lower = t.to_lowercase();
+    for (pfx, field) in [
+        ("host:", TextField::Host),
+        ("path:", TextField::Path),
+        ("port:", TextField::Port),
+    ] {
+        if let Some(rest) = lower.strip_prefix(pfx) {
+            return (field, rest.trim().to_string());
+        }
+    }
+    (TextField::Any, lower)
+}
+
+/// Lowercased text for a scoped field, or `None` if the event has no such field
+/// (so a scoped query excludes events of the wrong shape).
+fn field_haystack(kind: &EventKind, field: TextField) -> Option<String> {
+    match field {
+        TextField::Any => Some(kind.haystack()),
+        TextField::Host => match kind {
+            EventKind::NetConn { remote, local, .. } => {
+                Some(format!("{remote} {local}").to_lowercase())
+            }
+            EventKind::Dns { query, results, .. } => {
+                Some(format!("{} {}", query, results.as_deref().unwrap_or("")).to_lowercase())
+            }
+            _ => None,
+        },
+        TextField::Path => match kind {
+            EventKind::FileOp { path, .. } => Some(path.to_lowercase()),
+            EventKind::RegOp { path, .. } => Some(path.to_lowercase()),
+            EventKind::ImageLoad { image, .. } => Some(image.to_lowercase()),
+            EventKind::ProcCreate { image, .. } => Some(image.to_lowercase()),
+            _ => None,
+        },
+        TextField::Port => match kind {
+            EventKind::NetConn { remote_port, .. } => Some(remote_port.to_string()),
+            _ => None,
+        },
+    }
+}
+
+#[cfg(test)]
+mod query_tests {
+    use super::*;
+
+    fn ev(id: u64, node_id: Option<u64>, kind: EventKind) -> Event {
+        Event {
+            id,
+            ts_ms: id,
+            pid: 1,
+            node_id,
+            category: kind.category(),
+            dup_count: None,
+            kind,
+        }
+    }
+
+    fn fop(op: FileOp, path: &str) -> EventKind {
+        EventKind::FileOp {
+            op,
+            path: path.into(),
+        }
+    }
+
+    fn net(remote: &str, port: u16, dir: NetDir) -> EventKind {
+        EventKind::NetConn {
+            proto: Proto::Tcp,
+            direction: dir,
+            local: "10.0.0.1:1000".into(),
+            remote: remote.into(),
+            remote_port: port,
+        }
+    }
+
+    fn node(id: u64, parent: Option<u64>) -> ProcessNode {
+        ProcessNode {
+            node_id: id,
+            parent_node_id: parent,
+            pid: id as u32,
+            ppid: 0,
+            start_key: 0,
+            image: String::new(),
+            name: String::new(),
+            cmdline: None,
+            status: ProcStatus::Running,
+            started_ms: 0,
+            exited_ms: None,
+            exit_code: None,
+            event_count: 0,
+            counts: CategoryCounts::default(),
+            suspicion: 0,
+        }
+    }
+
+    fn cap_with(events: Vec<Event>) -> Capture {
+        let mut c = Capture::new(0);
+        c.events = events;
+        c
+    }
+
+    #[test]
+    fn ops_facet_filters_by_op_kind() {
+        let c = cap_with(vec![
+            ev(1, Some(1), fop(FileOp::Write, "a")),
+            ev(2, Some(1), fop(FileOp::Read, "b")),
+            ev(3, Some(1), fop(FileOp::Delete, "c")),
+        ]);
+        let f = EventFilter {
+            ops: Some(vec!["write".into(), "delete".into()]),
+            ..Default::default()
+        };
+        assert_eq!(c.query(&f, 0, 100).total, 2);
+    }
+
+    #[test]
+    fn proto_dir_and_port_filter_network() {
+        let c = cap_with(vec![
+            ev(1, Some(1), net("1.1.1.1", 443, NetDir::Outbound)),
+            ev(2, Some(1), net("2.2.2.2", 8080, NetDir::Outbound)),
+            ev(3, Some(1), net("3.3.3.3", 9000, NetDir::Inbound)),
+            ev(4, Some(1), fop(FileOp::Write, "p")),
+        ]);
+        // outbound tcp on a non-standard high port → only event 2.
+        let f = EventFilter {
+            proto: Some(Proto::Tcp),
+            direction: Some(NetDir::Outbound),
+            port_min: Some(1024),
+            ..Default::default()
+        };
+        let page = c.query(&f, 0, 100);
+        assert_eq!(page.total, 1);
+        assert_eq!(page.events[0].id, 2);
+    }
+
+    #[test]
+    fn subtree_scope_includes_descendants() {
+        let mut c = Capture::new(0);
+        // 1 → 2 → 3, plus unrelated 4.
+        c.nodes = vec![node(1, None), node(2, Some(1)), node(3, Some(2)), node(4, None)];
+        c.events = vec![
+            ev(1, Some(1), fop(FileOp::Write, "a")),
+            ev(2, Some(2), fop(FileOp::Write, "b")),
+            ev(3, Some(3), fop(FileOp::Write, "c")),
+            ev(4, Some(4), fop(FileOp::Write, "d")),
+        ];
+        let subtree = EventFilter {
+            node_ids: Some(vec![1]),
+            include_subtree: Some(true),
+            ..Default::default()
+        };
+        assert_eq!(c.query(&subtree, 0, 100).total, 3);
+        let direct = EventFilter {
+            node_ids: Some(vec![1]),
+            include_subtree: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(c.query(&direct, 0, 100).total, 1);
+    }
+
+    #[test]
+    fn field_scoped_text_separates_host_and_path() {
+        let c = cap_with(vec![
+            ev(1, Some(1), fop(FileOp::Write, "C:\\evil\\host.txt")),
+            ev(2, Some(1), net("host.example.com", 80, NetDir::Outbound)),
+        ]);
+        // host: matches only the net event, not the file path that contains "host".
+        let host = EventFilter {
+            text: Some("host:host".into()),
+            ..Default::default()
+        };
+        let page = c.query(&host, 0, 100);
+        assert_eq!(page.total, 1);
+        assert_eq!(page.events[0].id, 2);
+        // path: matches only the file event.
+        let path = EventFilter {
+            text: Some("path:evil".into()),
+            ..Default::default()
+        };
+        assert_eq!(c.query(&path, 0, 100).total, 1);
+    }
+
+    #[test]
+    fn port_scoped_text_matches_exact_port() {
+        let c = cap_with(vec![
+            ev(1, Some(1), net("a", 4444, NetDir::Outbound)),
+            ev(2, Some(1), net("b", 443, NetDir::Outbound)),
+        ]);
+        let f = EventFilter {
+            text: Some("port:4444".into()),
+            ..Default::default()
+        };
+        assert_eq!(c.query(&f, 0, 100).total, 1);
     }
 }

@@ -45,7 +45,7 @@ pub enum RegOp {
     DeleteValue,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[allow(dead_code)] // Udp reserved for future UDP-connection capture.
 pub enum Proto {
@@ -53,7 +53,7 @@ pub enum Proto {
     Udp,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NetDir {
     Outbound,
@@ -233,6 +233,28 @@ impl EventKind {
             }
             EventKind::ImageLoad { image, .. } => image.to_lowercase(),
         }
+    }
+
+    /// Canonical operation token for the per-category op facet (matches the
+    /// frontend op ids). `None` for events with no operation concept.
+    pub fn op_token(&self) -> Option<&'static str> {
+        Some(match self {
+            EventKind::FileOp { op, .. } => match op {
+                FileOp::Create => "create",
+                FileOp::Open => "open",
+                FileOp::Read => "read",
+                FileOp::Write => "write",
+                FileOp::Delete => "delete",
+                FileOp::Rename => "rename",
+            },
+            EventKind::RegOp { op, .. } => match op {
+                RegOp::CreateKey => "create_key",
+                RegOp::SetValue => "set_value",
+                RegOp::DeleteKey => "delete_key",
+                RegOp::DeleteValue => "delete_value",
+            },
+            _ => return None,
+        })
     }
 }
 

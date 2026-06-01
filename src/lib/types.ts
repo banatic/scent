@@ -156,6 +156,7 @@ export interface EventFilter {
   category?: Category | null;
   node_id?: number | null;
   pid?: number | null;
+  /** Free text; a `host:` / `path:` / `port:` prefix scopes the match to a field. */
   text?: string | null;
   hide_noise?: boolean | null;
   collapse?: boolean | null;
@@ -164,6 +165,17 @@ export interface EventFilter {
   /** Capture-relative time window (ms), inclusive — timeline brush. */
   ts_from?: number | null;
   ts_to?: number | null;
+  // ---- Faceted filters (Phase 8.4) ----
+  /** Per-category operation tokens: file create/open/read/write/delete/rename;
+   *  registry create_key/set_value/delete_key/delete_value. */
+  ops?: string[] | null;
+  proto?: Proto | null;
+  direction?: NetDir | null;
+  port_min?: number | null;
+  port_max?: number | null;
+  /** Scope to these process nodes; with include_subtree, their descendants too. */
+  node_ids?: number[] | null;
+  include_subtree?: boolean | null;
 }
 
 export interface EventPage {
