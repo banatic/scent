@@ -44,21 +44,21 @@
 
 ---
 
-## 2단계 · Sigma 필드 어댑터 — 신설 `sigma_fields.rs`
+## 2단계 · Sigma 필드 어댑터 — 신설 `sigma_fields.rs` ✅
 **목표**: 내부 `Event` → Sigma 표준 필드맵. **룰 엔진과 텔레메트리의 유일한 접점.**
 
-- [ ] `pub enum SigmaCategory { ProcessCreation, RegistrySet, RegistryEvent, DnsQuery, NetworkConnection, FileEvent, FileAccess, ImageLoad }` (+ `as_str()` = Sigma logsource.category).
-- [ ] `fn sigma_view(ev: &Event, cap: &Capture) -> Option<(SigmaCategory, BTreeMap<String,String>)>`
+- [x] `pub enum SigmaCategory { ProcessCreation, RegistrySet, RegistryEvent, DnsQuery, NetworkConnection, FileEvent, FileAccess, ImageLoad }` (+ `as_str()`/`from_str()` = Sigma logsource.category).
+- [x] `fn sigma_view(ev: &Event, cap: &Capture) -> Option<(SigmaCategory, BTreeMap<String,String>)>`
   - **process_creation**: `Image`(자식), `OriginalFileName`(basename), `CommandLine`(자식, 1단계), `ParentImage`/`ParentCommandLine`(`cap` 노드 `ev.node_id`=부모), `IntegrityLevel`(자식 노드: `cap.tracker.live_node(child_pid)` — ingest 직후라 정확, 있으면).
   - **registry_set**(SetValue/DeleteValue) / **registry_event**(CreateKey/DeleteKey): `TargetObject`(정규화 `HKLM\...`, value명 있으면 `\value` 부착), `EventType`(SetValue/CreateKey/…), `Details`(값 데이터 — 미수집이라 보통 생략→해당 룰 "필드 미충족").
   - **dns_query**: `QueryName`, `QueryResults`.
   - **network_connection**: `DestinationIp`, `DestinationPort`, `Initiated`(outbound=`"true"`), `Image`(actor 노드).
   - **file_event**(write/create) / **file_access**(read): `TargetFilename`.
   - **image_load**: `ImageLoaded`.
-- [ ] `provided_fields(cat) -> &'static [&str]` — 카테고리별 제공 필드 집합. **4단계 큐레이션 스크립트가 이 목록을 하드코딩 복제(동기화)**.
-- [ ] **건드리는 파일**: `sigma_fields.rs`(신규), `store.rs`(`Capture`에 노드 조회 헬퍼 noop 추가), `lib.rs`(mod 등록).
-- [ ] **검증**: 카테고리별 필드맵 단위 테스트(합성 `Event`+`Capture`로 ParentImage/Image/TargetObject 등 검증). `cargo test --lib`.
-- [ ] **커밋**: `feat(sigma): Event→Sigma field adapter`
+- [x] `provided_fields(cat) -> &'static [&str]` — 카테고리별 제공 필드 집합. **4단계 큐레이션 스크립트가 이 목록을 하드코딩 복제(동기화)**.
+- [x] **건드리는 파일**: `sigma_fields.rs`(신규), `store.rs`(`Capture::node(id)` 헬퍼), `lib.rs`(mod 등록).
+- [x] **검증**: 카테고리별 필드맵 단위 테스트 8개 통과(`cargo test --lib sigma_fields`).
+- [x] **커밋**: `feat(sigma): Event→Sigma field adapter`
 
 ---
 

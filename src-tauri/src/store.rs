@@ -452,6 +452,11 @@ impl Capture {
         &self.nodes
     }
 
+    /// A node by its monotonic id (== push index). For Sigma Parent* resolution.
+    pub fn node(&self, id: u64) -> Option<&ProcessNode> {
+        self.nodes.get(id as usize)
+    }
+
     /// Currently-live tracked PIDs (for scoping the deep session).
     pub fn live_pids(&self) -> HashSet<u32> {
         self.tracker.live_pids()
