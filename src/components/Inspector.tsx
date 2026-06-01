@@ -4,10 +4,19 @@
 // highlighted.
 
 import { useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, X } from "lucide-react";
 
 import { CATEGORY_META, dnsType, formatTime } from "../lib/events";
 import type { DeepFinding, ProcessNode, ScentEvent } from "../lib/types";
+
+function CloseBtn({ onClose }: { onClose?: () => void }) {
+  if (!onClose) return null;
+  return (
+    <button className="insp__close" onClick={onClose} aria-label="Close inspector" title="Close (Esc)">
+      <X size={14} strokeWidth={2} />
+    </button>
+  );
+}
 
 function Field({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   if (value === null || value === undefined || value === "") return null;
@@ -82,22 +91,27 @@ export function Inspector({
   finding,
   event,
   node,
+  onClose,
 }: {
   finding: DeepFinding | null;
   event: ScentEvent | null;
   node: ProcessNode | null;
+  onClose?: () => void;
 }) {
   if (finding) {
     return (
       <aside className="insp">
         <header className="insp__head">
           <span className="insp__title">{finding.caller ?? "unresolved caller"}</span>
-          {finding.benign && (
-            <span className="benign-tag" title={finding.benign}>
-              <ShieldCheck size={11} />
-              benign
-            </span>
-          )}
+          <span className="insp__head-meta">
+            {finding.benign && (
+              <span className="benign-tag" title={finding.benign}>
+                <ShieldCheck size={11} />
+                benign
+              </span>
+            )}
+            <CloseBtn onClose={onClose} />
+          </span>
         </header>
         <dl className="insp__list">
           <Field label="Target" value={finding.path} mono />
@@ -128,7 +142,10 @@ export function Inspector({
             <span className="cat-tag__dot" />
             {meta.label}
           </span>
-          <span className="insp__id tnum">#{event.id}</span>
+          <span className="insp__head-meta">
+            <span className="insp__id tnum">#{event.id}</span>
+            <CloseBtn onClose={onClose} />
+          </span>
         </header>
         <dl className="insp__list">
           <Field label="Time" value={formatTime(event.ts_ms)} mono />
@@ -146,7 +163,10 @@ export function Inspector({
       <aside className="insp">
         <header className="insp__head">
           <span className="insp__title">{node.name}</span>
-          <span className={`dot dot--${node.status}`} />
+          <span className="insp__head-meta">
+            <span className={`dot dot--${node.status}`} />
+            <CloseBtn onClose={onClose} />
+          </span>
         </header>
         <dl className="insp__list">
           <Field label="PID" value={node.pid} mono />
@@ -167,9 +187,6 @@ export function Inspector({
     );
   }
 
-  return (
-    <aside className="insp insp--empty">
-      <p>Select a process, event, or deep finding to inspect.</p>
-    </aside>
-  );
+  // Nothing selected — the slide-over is unmounted by the parent (AnimatePresence).
+  return null;
 }

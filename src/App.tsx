@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   Crosshair,
@@ -23,6 +24,7 @@ import { TimelineView } from "./components/TimelineView";
 import { TopBar } from "./components/TopBar";
 import { VerdictPanel } from "./components/VerdictPanel";
 import { branchSeverity, directSeverityByNode } from "./lib/findings";
+import { spring } from "./lib/motion";
 import {
   getDeepFindings,
   getFindings,
@@ -252,6 +254,13 @@ export default function App() {
     setEvidenceView("table");
   }, []);
 
+  // Deselect everything the inspector reflects → the slide-over animates out.
+  const closeInspector = useCallback(() => {
+    setSelectedNodeId(null);
+    setSelectedEvent(null);
+    setSelectedDeep(null);
+  }, []);
+
   const evidenceOptions = useMemo<SegOption<EvidenceView>[]>(() => {
     const opts: SegOption<EvidenceView>[] = [
       { id: "table", label: "Table", icon: <Table2 size={13} /> },
@@ -274,7 +283,18 @@ export default function App() {
     evidenceView === "deep" && status.deep_count === 0 ? "table" : evidenceView;
 
   const selectedNode = selectedNodeId != null ? nodesById.get(selectedNodeId) ?? null : null;
+  const inspectorOpen = selectedDeep != null || selectedEvent != null || selectedNode != null;
   const banner = error ?? status.admin_error;
+
+  // Esc closes the inspector slide-over.
+  useEffect(() => {
+    if (!inspectorOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeInspector();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inspectorOpen, closeInspector]);
 
   return (
     <div className="app">
@@ -400,10 +420,27 @@ export default function App() {
             )}
             {tab === "ioc" && <IocPanel liveTotal={status.total_events} />}
             {tab === "verdict" && <VerdictPanel hasCapture={status.total_events > 0} />}
+
+            <AnimatePresence>
+              {inspectorOpen && (
+                <motion.div
+                  className="insp-slot"
+                  initial={{ x: 340, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: 340, opacity: 0 }}
+                  transition={spring.panel}
+                >
+                  <Inspector
+                    finding={selectedDeep}
+                    event={selectedEvent}
+                    node={selectedNode}
+                    onClose={closeInspector}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-
-        <Inspector finding={selectedDeep} event={selectedEvent} node={selectedNode} />
       </div>
     </div>
   );

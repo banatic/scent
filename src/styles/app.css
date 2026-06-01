@@ -733,33 +733,63 @@
   cursor: crosshair;
 }
 
-/* ---- Inspector (chrome) ---------------------------------------------------- */
+/* ---- Inspector (chrome): contextual slide-over ----------------------------- */
+/* Floats over the data panel and is mounted only when something is selected — no
+   permanent 3rd column. The one piece of glass that earns its blur by overlaying
+   content (the iOS slide-over pattern), so chrome stays a single glass layer. */
+.insp-slot {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  bottom: var(--sp-3);
+  width: 320px;
+  max-width: calc(100% - var(--sp-5));
+  z-index: 20;
+  display: flex;
+}
 .insp {
-  flex: 0 0 300px;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   padding: var(--sp-3);
-  background: var(--glass-fill);
+  background: var(--glass-fill-strong);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border-radius: var(--r-3);
   box-shadow: var(--shadow-glass);
   overflow: auto;
 }
-.insp--empty {
-  align-items: center;
-  justify-content: center;
-  color: var(--ink-3);
-  font-size: var(--fs-sm);
-  text-align: center;
-}
 .insp__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--sp-2);
   padding-bottom: var(--sp-2);
   border-bottom: 0.5px solid var(--hairline);
+}
+.insp__head-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+}
+.insp__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.insp__close:hover {
+  background: var(--row-hover);
+  color: var(--ink-1);
 }
 .insp__title {
   font-weight: var(--fw-semibold);
