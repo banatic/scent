@@ -64,6 +64,18 @@ pub fn create_suspended(path: &str, args: &[String]) -> Result<LaunchResult, Str
     let cmdline = build_command_line(path, args);
     let mut cmd_w = wide(&cmdline);
 
+    // Default the target's working directory to the exe's own folder. With a
+    // NULL lpCurrentDirectory the child inherits *scent's* cwd, so programs that
+    // load assets by relative path (./assets, data\...) break — and the bogus
+    // cwd also pollutes the captured file/registry events vs. a normal launch.
+    let workdir_w = std::path::Path::new(path)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(|p| wide(&p.to_string_lossy()));
+    let workdir_ptr = workdir_w
+        .as_ref()
+        .map_or(PCWSTR::null(), |w| PCWSTR(w.as_ptr()));
+
     let startup = STARTUPINFOW {
         cb: std::mem::size_of::<STARTUPINFOW>() as u32,
         ..Default::default()
@@ -79,7 +91,7 @@ pub fn create_suspended(path: &str, args: &[String]) -> Result<LaunchResult, Str
             false,
             CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT,
             None,
-            PCWSTR::null(),
+            workdir_ptr,
             &startup,
             &mut pi,
         )
